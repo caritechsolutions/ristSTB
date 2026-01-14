@@ -629,23 +629,92 @@ Offset  Field                      Size    Description
 
 ### ristsender_marker
 
-VSF TR-06-4 Part 7 marker-aware sender with circuit breaker protection.
+VSF TR-06-4 Part 7 marker-aware sender with circuit breaker protection. This is the critical validation and re-encapsulation stage that bridges the satellite path to the RIST recovery system.
 
-**Features:**
-- Validates markers at BEGINNING of block per spec
-- Detects lost markers via sequence tracking
-- Circuit breaker protection:
-  - Trigger: 10 consecutive marker losses
-  - Trigger: 10 validation failures within 10 seconds
-  - Recovery: 10 consecutive good blocks over 10 seconds
-- Memory efficient (no buffering during recovery state)
+**Purpose:**
+This program receives the raw TS stream from satellite (which now contains Part 7 markers from `ristreceiver_with_markers`). It validates the integrity of the stream and re-encapsulates it into RIST for downstream delivery.
 
-**Circuit Breaker States:**
+**How It Works:**
+
+1. **Marker Detection & CRC32 Validation**
+   - Receives raw TS from satellite (PID 0x1FF0 markers muxed in)
+   - Parses each marker and validates CRC-32 (ISO/IEC 13818-1)
+   - If CRC fails, marker is untrusted and block is dropped
+
+2. **Packet Count Validation**
+   - Counts null packets (PID 0x1FFF) and non-null packets between markers
+   - Compares counted values against marker's `non_null_count` and `null_count`
+   - If counts don't match → packet loss detected → block dropped
+
+3. **RIST Re-encapsulation with Original Sequence Numbers**
+   - If validation passes, forwards the TS data via RIST
+   - Uses the **RTP sequence number from the marker** (`rtp_sequence_start`)
+   - This preserves end-to-end sequence continuity
+
+4. **Gap Creation for NACK-based Recovery**
+   - When blocks are dropped (CRC fail or count mismatch), a **sequence gap** is created
+   - The downstream RIST receiver detects this gap
+   - Receiver sends NACKs via the **weight-1000 peer** (IP path) to request missing packets
+   - This enables satellite loss to be recovered via terrestrial backup
+
+**Architecture in System:**
+```
+┌───────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  Satellite    │     │ ristsender_      │     │  Regular RIST    │     │   Output     │
+│  Receiver     │────▶│    marker        │────▶│    Receiver      │────▶│   (STB)      │
+│               │ Raw │                  │RIST │                  │ Raw │              │
+│ TS + Part 7   │ TS  │ - CRC32 validate │     │ - Detects gaps   │ TS  │ Mirror of    │
+│   Markers     │     │ - Count validate │     │ - NACKs via IP   │     │  headend     │
+└───────────────┘     │ - Drop bad blocks│     │ - timing-mode=1  │     │   stream     │
+                      │ - Re-encapsulate │     └──────────────────┘     └──────────────┘
+                      │   with marker seq│              │
+                      └──────────────────┘              │ NACKs
+                                                       ▼
+                                              ┌──────────────────┐
+                                              │  Weight-1000     │
+                                              │  Recovery Peer   │
+                                              │  (IP Path)       │
+                                              └──────────────────┘
+```
+
+**Circuit Breaker Protection:**
+
+The circuit breaker handles catastrophic failures (complete signal loss, excessive errors):
+
 | State | Description |
 |-------|-------------|
-| NORMAL | Normal operation, sending blocks |
-| SHUTDOWN | Catastrophic failure, discarding packets, waiting for good marker |
-| RECOVERY | Validating recovery with good blocks |
+| **NORMAL** | Normal operation - validate and send blocks |
+| **SHUTDOWN** | Catastrophic failure detected - discard all packets, wait for good marker |
+| **RECOVERY** | Validating recovery - counting good blocks, printing restart messages |
+
+**Circuit Breaker Triggers:**
+- 10 consecutive marker losses
+- 10 validation failures within 10 seconds
+
+**Circuit Breaker Recovery:**
+- Requires 10 consecutive good blocks over 10 seconds
+- Prints "RESTART SENDER" messages during recovery (triggers watchdog)
+
+**Validation Flow:**
+```
+For each TS packet received:
+  │
+  ├─ Is marker packet (PID 0x1FF0)?
+  │   │
+  │   ├─ YES: Parse marker
+  │   │        │
+  │   │        ├─ CRC32 valid?
+  │   │        │   ├─ NO: Ignore marker, continue
+  │   │        │   └─ YES: Validate buffered block
+  │   │        │           │
+  │   │        │           ├─ Counts match marker?
+  │   │        │           │   ├─ NO: DROP BLOCK (creates gap)
+  │   │        │           │   └─ YES: SEND via RIST (with marker's seq)
+  │   │        │
+  │   │        └─ Reset counters for next block
+  │   │
+  │   └─ NO: Buffer packet, increment null/non-null count
+```
 
 **Usage:**
 ```bash
@@ -656,18 +725,75 @@ VSF TR-06-4 Part 7 marker-aware sender with circuit breaker protection.
 
 ### rist_watchdog
 
-Process watchdog that monitors ristsender_marker and automatically restarts it.
+Process watchdog that monitors ristsender_marker and handles FSR (Full Stream Recovery) return issues.
 
-**Features:**
-- Monitors stdout/stderr for "RESTART SENDER" trigger
-- Graceful shutdown on SIGINT/SIGTERM
-- Configurable restart delay (default: 2 seconds)
-- Statistics tracking (restarts, uptime)
+**Purpose:**
+When complete satellite failure occurs, the system triggers FSR via the weight-1000 IP path. The full stream is delivered via IP while satellite is monitored for recovery. However, **ristsender_marker cannot cleanly return from FSR** - it crashes or hangs when satellite recovers. The watchdog provides a workaround by automatically restarting the process.
+
+**FSR Recovery Sequence:**
+```
+1. Satellite fails completely
+   │
+2. Excessive packet loss triggers circuit breaker
+   │
+3. Regular RIST receiver sends FSR Enable to sender (via weight-1000 peer)
+   │
+4. Sender starts full stream via IP path (weight-1000)
+   │
+5. ristsender_marker enters SHUTDOWN state, discarding satellite packets
+   │
+6. Satellite signal recovers
+   │
+7. ristsender_marker sees good markers, enters RECOVERY state
+   │
+8. After 10 good blocks over 10 seconds, prints "RESTART SENDER"
+   │
+9. Watchdog detects message, kills and restarts ristsender_marker
+   │
+10. Fresh ristsender_marker instance starts cleanly on recovered satellite
+   │
+11. Regular receiver sends FSR Disable, IP path stops
+   │
+12. System returns to normal satellite operation (hitless!)
+```
+
+**Key Behavior:**
+- Monitors both stdout and stderr for "RESTART SENDER" string
+- When detected, terminates child process and restarts after 2-second delay
+- This provides a **hitless** recovery - no output disruption during FSR or return
 
 **Usage:**
 ```bash
 ./rist_watchdog ./ristsender_marker -i udp://239.6.6.6:6000 -u "rist://@192.168.110.43:5554?buffer=8000"
 ```
+
+**Features:**
+- Passes through all command line arguments to monitored program
+- Graceful shutdown on SIGINT/SIGTERM
+- 2-second restart delay to avoid rapid cycling
+- Statistics tracking (restart count, uptime)
+
+---
+
+### Downstream RIST Receiver Configuration
+
+The regular RIST receiver that receives from ristsender_marker requires specific configuration:
+
+**Required: timing-mode=1**
+```bash
+ristreceiver -i "rist://@192.168.110.43:5554?timing-mode=1" -o udp://output:port
+```
+
+| Timing Mode | Value | Description |
+|-------------|-------|-------------|
+| Source (default) | 0 | Uses RTP timestamps from source |
+| **Arrival** | **1** | Uses local arrival time (REQUIRED) |
+| RTC | 2 | Uses RTP/RTCP + NTP |
+
+**Why timing-mode=1 is required:**
+- ristsender_marker synthesizes timestamps when re-encapsulating
+- Original satellite timestamps may be discontinuous or invalid after recovery
+- Arrival time mode ensures proper playout timing regardless of source timestamps
 
 ---
 
