@@ -1,8 +1,0 @@
-<!DOCTYPE RCC>
-<RCC version="1.0">
-    <qresource prefix="/">
-        <file>main.qml</file>
-        <file>LiveTvScreen.qml</file>
-        <file>fonts/fa-solid-900.ttf</file>
-    </qresource>
-</RCC>
