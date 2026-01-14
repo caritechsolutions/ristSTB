@@ -494,28 +494,136 @@ else if (subtype == FSR_SUBTYPE_ENABLE || subtype == FSR_SUBTYPE_DISABLE) {
 
 ### ristreceiver_with_markers
 
-RIST receiver with VSF TR-06-4 Part 7 marker insertion.
+RIST receiver that converts RIST RTP metadata into VSF TR-06-4 Part 7 markers for multi-path redundancy validation.
 
-**Features:**
-- Extracts RTP metadata from RIST data blocks
-- Inserts metadata markers every 5 RTP payloads
-- Maintains 1316-byte (7 TS packets) UDP packet alignment
-- CRC-32 validation per ISO/IEC 13818-1
+**Purpose:**
+This program sits at the output of a regular RIST sender. The sender is configured with listening peers including one with **weight=0** (always sending full stream). Our program:
+1. Connects to the RIST sender as a receiver
+2. Receives data blocks containing RTP metadata (sequence numbers, SSRC, flow_id)
+3. Converts RIST RTP metadata into custom Part 7 markers
+4. Strips RIST headers, outputting raw MPEG-TS
+5. Muxes Part 7 markers into the TS stream for downstream validation
+
+**Architecture:**
+```
+┌─────────────────┐          ┌──────────────────────────┐          ┌────────────────┐
+│   RIST Sender   │  weight=0│  ristreceiver_with_      │          │   Downstream   │
+│  (Headend)      │─────────▶│      markers             │─────────▶│   Upload/      │
+│                 │  Full    │                          │  Raw TS  │   Processing   │
+│ Listening peer  │  Stream  │ - Extracts RTP metadata  │  + Part 7│                │
+│ @:5554          │          │ - Creates Part 7 markers │  Markers │                │
+└─────────────────┘          │ - Strips RIST headers    │          └────────────────┘
+                             │ - Muxes markers into TS  │
+                             └──────────────────────────┘
+```
 
 **Usage:**
 ```bash
 ./ristreceiver_with_markers -i rist://192.168.110.107:5554 -o udp://239.6.6.6:6000
 ```
 
-**Marker Format (PID 0x1FF0):**
-- table_id: 0xBF
-- marker_sequence_number (32-bit)
-- non_null_count (16-bit)
-- null_count (16-bit)
-- rtp_sequence_start (32-bit, MSB+LSB)
-- rtp_sequence_next (32-bit, MSB+LSB)
-- source_ssrc (32-bit)
-- CRC-32
+**How It Works:**
+
+1. **RIST Connection** - Creates a RIST receiver context and connects to the sender:
+   - Uses Simple Profile for reliability
+   - Configures RIST logging
+   - Establishes peer connection to sender's listening port
+
+2. **Data Block Processing** - For each received RIST data block:
+   - Extracts RTP metadata: `seq`, `flow_id`, `ts_ntp`
+   - Uses `flow_id` as the SSRC (source identifier)
+   - Data arrives already stripped of RTP headers (raw TS payload)
+
+3. **Packet Counting** - Analyzes each 188-byte TS packet in the block:
+   - Counts **null packets** (PID = 0x1FFF) - stuffing/padding
+   - Counts **non-null packets** (PID ≠ 0x1FFF) - actual content
+   - Accumulates counts over 5 RTP payloads
+
+4. **Part 7 Marker Generation** - Every 5 RTP payloads, creates a marker containing:
+   - Summary of the preceding 5 RTP blocks
+   - Sequence tracking for loss detection
+   - Packet statistics for validation
+
+**Constants:**
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `RTP_PAYLOADS_PER_MARKER` | 5 | Generate marker after every 5 RTP payloads |
+| `MARKER_PID` | 0x1FF0 | PID for Part 7 marker TS packets |
+| `MARKER_TABLE_ID` | 0xBF | Private section table_id per MPEG-TS |
+| `TS_PACKET_SIZE` | 188 | Standard TS packet size |
+| `UDP_PAYLOAD_SIZE` | 1316 | 7 TS packets per UDP (7 × 188) |
+| `UDP_PACKETS_PER_BLOCK` | 7 | Typical TS packets per RTP payload |
+
+**Part 7 Marker Format (PID 0x1FF0, 188 bytes):**
+```
+Offset  Field                      Size    Description
+──────────────────────────────────────────────────────────────
+0       sync_byte                  1       0x47 (TS sync)
+1-2     PID (0x1FF0)              13 bits Marker PID
+        transport_priority         1 bit
+        payload_unit_start         1 bit   Set to 1
+        transport_error            1 bit
+3       continuity_counter         4 bits  Incremented each marker
+        adaptation_field_control   2 bits
+        scrambling_control         2 bits
+4       pointer_field              1       0x00
+5       table_id                   1       0xBF (private section)
+6-7     section_length             12 bits Length of remaining data
+8-11    marker_sequence_number     4       32-bit marker sequence
+12-13   non_null_count             2       16-bit count of non-null packets
+14-15   null_count                 2       16-bit count of null packets
+16-17   rtp_sequence_start_msb     2       Upper 16 bits of start seq
+18-19   rtp_sequence_start_lsb     2       Lower 16 bits of start seq
+20-21   rtp_sequence_next_msb      2       Upper 16 bits of next seq
+22-23   rtp_sequence_next_lsb      2       Lower 16 bits of next seq
+24-27   source_ssrc                4       32-bit SSRC (flow_id)
+28-31   CRC-32                     4       ISO/IEC 13818-1 CRC
+32-187  padding                    156     0xFF stuffing bytes
+```
+
+**UDP Alignment:**
+- Output maintains strict 1316-byte UDP packet alignment (7 TS packets)
+- Uses ring buffer to accumulate TS packets
+- Flushes to output when buffer reaches 7 packets
+- Markers are inserted into the buffer like regular TS packets
+- Ensures downstream receivers see standard TS-over-UDP format
+
+**Processing Flow:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ For each RIST data block received:                          │
+│                                                             │
+│  1. Extract RTP metadata (seq, flow_id/SSRC)               │
+│  2. Count null/non-null TS packets in payload              │
+│  3. Accumulate counts for marker                           │
+│  4. Send raw TS packets to output buffer                   │
+│  5. Increment rtp_payload_count                            │
+│                                                             │
+│  If rtp_payload_count >= 5:                                │
+│    - Create Part 7 marker packet                           │
+│    - Insert marker into output buffer                      │
+│    - Reset counters                                        │
+│    - Increment marker_sequence                             │
+│                                                             │
+│  When buffer has 7 packets:                                │
+│    - Send 1316-byte UDP to output destination              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Functions:**
+| Function | Description |
+|----------|-------------|
+| `compute_crc32()` | Calculates ISO/IEC 13818-1 CRC-32 for marker validation |
+| `create_part7_marker()` | Builds 188-byte marker packet with accumulated stats |
+| `send_ts_packet()` | Adds packet to ring buffer, flushes when full |
+| `cb_recv()` | RIST receive callback - processes each data block |
+| `init_udp_socket()` | Creates output UDP socket for raw TS |
+
+**Output Format:**
+- Raw MPEG-TS stream (no RTP/RIST headers)
+- Part 7 markers muxed in every 5 original RTP payloads
+- Standard 7-packet UDP alignment (compatible with standard receivers)
+- Markers on PID 0x1FF0 can be extracted by downstream validators
 
 ---
 
