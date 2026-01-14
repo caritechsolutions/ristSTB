@@ -422,11 +422,12 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
      ┌────────────┐  ┌────────────┐  ┌────────────┐
      │ Satellite  │  │ Satellite  │  │ Terrestrial│
      │  Peer #1   │  │  Peer #2   │  │   Peer     │
-     │ weight=5   │  │ weight=5   │  │ weight=1000│
+     │ weight=0   │  │ weight=0   │  │ weight=1000│
+     │ (always tx)│  │ (always tx)│  │ (on-demand)│
      └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
            │               │               │
-           │     Primary   │    Recovery   │
-           │      Path     │   Agent Path  │
+           │   Always On   │   Recovery    │
+           │   Full Stream │   Agent Path  │
            ▼               ▼               ▼
      ┌─────────────────────────────────────────┐
      │              RIST Receiver              │
@@ -437,10 +438,55 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 ```
 
 **Workflow:**
-1. Normal operation: Data flows via satellite peers (weight=5), NACKs go to weight-1000 peer
+1. Normal operation: Data always flows via satellite peers (weight=0), NACKs go to weight-1000 peer
 2. Satellite degradation detected: Receiver sends FSR Enable to sender
 3. Sender adds receiver to FSR list, starts sending full stream via weight-1000 path
 4. Satellite recovers: Receiver sends FSR Disable, sender stops weight-1000 transmission
+
+---
+
+### 14. FSR Message Handler (Sender Side)
+
+**File:** `librist/src/rist-common.c` (Lines 2366-2420)
+
+When the sender receives an FSR Enable or Disable message from a receiver, it updates the FSR peer list:
+
+```c
+else if (subtype == FSR_SUBTYPE_ENABLE || subtype == FSR_SUBTYPE_DISABLE) {
+    /* RIST Part 7 Full Stream Request (FSR) signaling */
+
+    // Validate: packet size >= 12 bytes
+    // Validate: name field == "RIST"
+    // Validate: sender side only (!peer->receiver_mode)
+    // Validate: peer is authenticated
+
+    /* Handle FSR Enable/Disable */
+    if (subtype == FSR_SUBTYPE_ENABLE) {
+        if (add_to_fsr_list(peer->adv_peer_id) == 0) {
+            rist_log_priv(ctx, RIST_LOG_INFO,
+                "FSR ENABLE: Added peer %u to full stream list\n",
+                peer->adv_peer_id);
+        }
+    }
+    else { /* FSR_SUBTYPE_DISABLE */
+        if (remove_from_fsr_list(peer->adv_peer_id) == 0) {
+            rist_log_priv(ctx, RIST_LOG_INFO,
+                "FSR DISABLE: Removed peer %u from full stream list\n",
+                peer->adv_peer_id);
+        }
+    }
+}
+```
+
+**Validation steps before processing:**
+1. Packet size minimum 12 bytes
+2. Name field must be "RIST" (4 bytes)
+3. Must be on sender side (not `receiver_mode`)
+4. Peer must be authenticated
+
+**Actions:**
+- FSR Enable → `add_to_fsr_list(peer->adv_peer_id)` - adds peer to receive full stream from weight-1000 path
+- FSR Disable → `remove_from_fsr_list(peer->adv_peer_id)` - removes peer from full stream list
 
 ---
 
