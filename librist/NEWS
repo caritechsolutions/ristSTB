@@ -1,0 +1,14 @@
+Changes for 2.1.2 'Tesseract':
+----------------------------
+
+Initial release of librist, a fast and portable implementation of the Video Services Forum (VSF) Technical Recommendations TR-06-1 and TR-06-2.
+ - Support for all features of the TR-06-1, i.e. Simple Profile
+ - Partial support for TR-06-2 including:
+   - PSK Encryption, AES 128 and 256
+   - Each side can initiate the connection
+   - Multipath is supported, load balanced or redundant, i.e. bonding of internet links
+   - One sender to many receivers, i.e. media server mode
+   - Tested packet recovery up to 50% continuous
+   - Sender to receiver jitter will not affect the output
+   - Fixed: Added mutex protection around FIFO access in rist_receiver_data_read2 to prevent rare race conditions and FIFO desynchronization when reading from multiple threads. Debug logs have been cleaned up for release.
+   - Changed: Replaced assertion in rist_receiver_data_read2 with error logging and a return code (-3) when FIFO desynchronization is detected, to avoid abrupt program termination and allow for graceful error handling.
