@@ -39,11 +39,19 @@ The following VSF TR-06-4 specification documents are included:
 |------|------|-------------|
 | `src/proto/rtp.h` | Modified | Added FSR subtype definitions |
 | `src/proto/rtp.c` | Modified | Added FSR packet writing functions |
-| `src/udp.c` | Modified | Added FSR list management and data filtering |
-| `src/rist-common.c` | Modified | Added FSR message processing and recovery logic |
+| `src/udp.c` | Modified | Added FSR list management, data filtering, **weight-1000 send logic** |
+| `src/rist-common.c` | Modified | Added FSR message processing, recovery logic, **weight-1000 NACK routing** |
 | `src/rist.c` | Modified | Added program selection initialization |
 | `src/program-selection.h` | **New** | Program selection API header |
 | `src/program-selection.c` | **New** | Program selection implementation |
+
+### Key Architectural Changes
+
+| Feature | Original Behavior | Modified Behavior |
+|---------|------------------|-------------------|
+| **NACK Routing** | Send to peer with lowest RTT | Prioritize weight-1000 peers, then lowest RTT |
+| **Data Sending** | Weight-based load balancing | Weight-1000 only sends when FSR requested |
+| **Recovery Agents** | N/A | Weight-1000 peers designated as recovery agents |
 
 ---
 
@@ -269,6 +277,170 @@ if (program_selection_init() != 0) {
 rist_log_priv(&ctx->common, RIST_LOG_INFO, "Cleaning up program selection system\n");
 program_selection_cleanup();
 ```
+
+---
+
+## Weight-1000 Recovery Agent System
+
+A key architectural feature of this implementation is the use of **weight-1000 peers** to designate recovery agents. This enables intelligent routing of both data and NACKs for multi-path redundancy.
+
+### Understanding Peer Weights
+
+| Weight | Role | Behavior |
+|--------|------|----------|
+| **0** | Duplicate path | Always sends data (mirroring) |
+| **1-999** | Load balanced | Standard weighted round-robin distribution |
+| **1000** | Recovery agent | Special handling - only active when FSR is requested |
+
+### 12. Modified NACK Peer Selection
+
+**File:** `librist/src/rist-common.c` (Lines 1049-1163)
+
+The original `send_nack_group` function selected the peer with lowest RTT for sending NACKs. The modified version prioritizes weight-1000 recovery agents.
+
+**Original function preserved with:**
+```c
+#ifdef default_send_nack_group_function
+// Original function (lines 1049-1089)
+#endif
+```
+
+**New behavior (Lines 1091-1163):**
+
+```c
+static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
+{
+    struct rist_peer *recovery_agent = NULL;
+    uint64_t recovery_agent_rtt = UINT64_MAX;
+
+    // First pass: Look for weight-1000 recovery agents
+    for (size_t i = 0; i < f->peer_lst_len; i++) {
+        struct rist_peer *check = f->peer_lst[i];
+        if (check->is_rtcp && !check->dead && check->config.weight == 1000) {
+            // If multiple recovery agents exist, select the one with lowest RTT
+            if (check->last_rtt < recovery_agent_rtt) {
+                recovery_agent = check;
+                recovery_agent_rtt = check->last_rtt;
+            }
+        }
+    }
+
+    // Store recovery agent globally for FSR to use
+    g_current_recovery_agent = recovery_agent;
+
+    // If we found a recovery agent, use it; otherwise fall back to standard logic
+    if (recovery_agent != NULL) {
+        peer = recovery_agent;
+    } else {
+        // Standard logic: select peer with lowest RTT
+        ...
+    }
+}
+```
+
+**Key changes:**
+1. **First pass** - Scans for weight-1000 peers specifically
+2. **Lowest RTT among weight-1000** - If multiple recovery agents exist, picks the one with lowest latency
+3. **Stores globally** - Saves the selected recovery agent for FSR operations
+4. **Fallback** - If no weight-1000 peer found, uses standard lowest-RTT selection
+
+---
+
+### 13. Modified Data Send Balancing
+
+**File:** `librist/src/udp.c` (Lines 845-1125)
+
+The `rist_sender_send_data_balanced` function controls how data is distributed to peers. The modified version adds special handling for weight-1000 recovery agents.
+
+**Original function preserved with:**
+```c
+#ifdef old_rist_sender_send_data_balanced_function
+// Original function (lines 845-982)
+#endif
+```
+
+**New function structure (Lines 988-1120):**
+
+```c
+// ========== REPLACE rist_sender_send_data_balanced FUNCTION ==========
+
+void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer *buffer)
+{
+    for (peer = ctx->common.PEERS; peer; peer = peer->next) {
+
+        if (peer->config.weight == 0 && !looped) {
+            // Weight-0: Always send (duplicate/mirror mode)
+            send_filtered_data_to_peer(peer, buffer, ...);
+        }
+        else if (peer->config.weight == 1000 && !looped) {
+            // Weight-1000: Recovery agent - only send if FSR requested
+            if (has_fsr_requests()) {
+                // Only send to peers that have requested FSR
+                if (peer_id_in_fsr_list(peer->adv_peer_id)) {
+                    send_filtered_data_to_peer(peer, buffer, ...);
+                }
+            }
+        }
+        else {
+            // Standard weighted load balancing
+            // ... election logic ...
+        }
+    }
+}
+
+// ========== END OF FUNCTION REPLACEMENT ==========
+```
+
+**Weight behavior summary:**
+
+| Weight | Data Sending Behavior |
+|--------|----------------------|
+| **0** | Always sends to peer (for path duplication) |
+| **1000** | Only sends when `has_fsr_requests()` is true AND peer is in FSR list |
+| **Other** | Standard weighted round-robin load balancing |
+
+**Key changes:**
+1. **Weight-0 unchanged** - Still always sends (duplicate mode)
+2. **Weight-1000 conditional** - Only sends when:
+   - `has_fsr_requests()` returns true (at least one FSR Enable received)
+   - `peer_id_in_fsr_list(peer->adv_peer_id)` is true (this specific peer requested FSR)
+3. **Uses filtered sending** - All paths now use `send_filtered_data_to_peer()` for program selection support
+
+---
+
+### Recovery Agent Architecture
+
+```
+                    ┌─────────────────┐
+                    │   RIST Sender   │
+                    │   (Headend)     │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+     ┌────────────┐  ┌────────────┐  ┌────────────┐
+     │ Satellite  │  │ Satellite  │  │ Terrestrial│
+     │  Peer #1   │  │  Peer #2   │  │   Peer     │
+     │ weight=5   │  │ weight=5   │  │ weight=1000│
+     └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+           │               │               │
+           │     Primary   │    Recovery   │
+           │      Path     │   Agent Path  │
+           ▼               ▼               ▼
+     ┌─────────────────────────────────────────┐
+     │              RIST Receiver              │
+     │  - Monitors satellite peer health       │
+     │  - Sends NACKs to weight-1000 peer      │
+     │  - Sends FSR Enable when satellite down │
+     └─────────────────────────────────────────┘
+```
+
+**Workflow:**
+1. Normal operation: Data flows via satellite peers (weight=5), NACKs go to weight-1000 peer
+2. Satellite degradation detected: Receiver sends FSR Enable to sender
+3. Sender adds receiver to FSR list, starts sending full stream via weight-1000 path
+4. Satellite recovers: Receiver sends FSR Disable, sender stops weight-1000 transmission
 
 ---
 
