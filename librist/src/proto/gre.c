@@ -224,6 +224,10 @@ void _librist_proto_gre_send_keepalive(struct rist_peer *p, uint8_t gre_version)
 		if (buf) {
 			memcpy(buf, &ka, sizeof(ka));
 			memcpy(buf + sizeof(ka), p->content_selection_json, p->content_selection_json_len);
+			rist_log_priv(get_cctx(p), RIST_LOG_DEBUG,
+				"Sending keepalive with contentSelection JSON (len=%zu): %.*s\n",
+				p->content_selection_json_len, (int)p->content_selection_json_len,
+				p->content_selection_json);
 			_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, buf, total_len, 0, 0, gre_version);
 			free(buf);
 			return;

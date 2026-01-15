@@ -2984,6 +2984,8 @@ protocol_bypass:
 	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
 		struct rist_keepalive_info info;
 		_librist_proto_gre_parse_keepalive(&recv_buf[payload_offset], recv_bufsize - payload_offset, &info);
+
+		/* Log keepalive capabilities when they change */
 		if (memcmp(&info.ka, &p->data, sizeof(peer->data)) != 0) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 				"New keepalive received. MAC: %x:%x:%x:%x:%x:%x"
@@ -2995,35 +2997,46 @@ protocol_bypass:
 				info.p, info.e, info.l, info.e,
 				info.n, info.d, info.t, info.v,
 				info.j, info.f);
-			if (info.json_len)
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Keepalive JSON:\n%.*s\n", info.json_len, info.json);
-
-// Parse JSON payload for contentSelection (VSF TR-06-4 Part 6)
-if (info.json_len > 0 && info.json) {
-    cJSON *json = cJSON_ParseWithLength((const char*)info.json, info.json_len);
-    if (json) {
-        cJSON *content_selection = cJSON_GetObjectItem(json, "contentSelection");
-        if (content_selection && cJSON_IsArray(content_selection)) {
-            // Found contentSelection - store it for this peer
-            char *content_str = cJSON_Print(json);
-            if (content_str) {
-                if (program_selection_add_peer(p->adv_peer_id, content_str) == 0) {
-                    rist_log_priv(get_cctx(peer), RIST_LOG_INFO, 
-                        "Updated program selection for peer %u\n", p->adv_peer_id);
-                } else {
-                    rist_log_priv(get_cctx(peer), RIST_LOG_WARN, 
-                        "Failed to parse program selection for peer %u\n", p->adv_peer_id);
-                }
-                free(content_str);
-            }
-        }
-        cJSON_Delete(json);
-    }
-}
 			//TODO: add callback?
 			//TODO: handle capabilities in some way
 			memcpy(&p->data, &info.ka, sizeof(peer->data));
 		}
+
+		/* VSF TR-06-4 Part 6: Always process contentSelection JSON if present
+		 * This must be outside the capability-change check so JSON is processed
+		 * on every keepalive, not just when capabilities change */
+		if (info.json_len > 0 && info.json) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
+				"Keepalive JSON from peer %u (len=%zu): %.*s\n",
+				p->adv_peer_id, info.json_len, (int)info.json_len, info.json);
+
+			cJSON *json = cJSON_ParseWithLength((const char*)info.json, info.json_len);
+			if (json) {
+				cJSON *content_selection = cJSON_GetObjectItem(json, "contentSelection");
+				if (content_selection && cJSON_IsArray(content_selection)) {
+					/* Found contentSelection - store it for this peer */
+					char *content_str = cJSON_Print(json);
+					if (content_str) {
+						if (program_selection_add_peer(p->adv_peer_id, content_str) == 0) {
+							rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+								"Updated program selection for peer %u\n", p->adv_peer_id);
+						} else {
+							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+								"Failed to parse program selection for peer %u\n", p->adv_peer_id);
+						}
+						free(content_str);
+					}
+				} else {
+					rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
+						"Keepalive JSON has no contentSelection array\n");
+				}
+				cJSON_Delete(json);
+			} else {
+				rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+					"Failed to parse keepalive JSON from peer %u\n", p->adv_peer_id);
+			}
+		}
+
 		p->last_pkt_received = now;
 		return;
 	}

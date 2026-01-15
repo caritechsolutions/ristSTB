@@ -135,60 +135,110 @@ RIST_PRIV bool has_fsr_requests(void)
 
 
 
-// Replace the existing helper function with this corrected version:
+/**
+ * Send data to a peer with optional program selection filtering and NPD.
+ *
+ * IMPORTANT: When using program selection filtering, do NOT use the -n flag!
+ * The -n flag applies NPD at ingestion, which prevents proper filtering.
+ * This function handles NPD internally after filtering.
+ */
 static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct rist_buffer *buffer, uint8_t buffer_type, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
 {
-    uint8_t *payload = (uint8_t*)buffer->data;  // Cast to uint8_t*
-    uint8_t *filtered_data = &payload[RIST_MAX_PAYLOAD_OFFSET];
+    uint8_t *payload = (uint8_t*)buffer->data;
+    uint8_t *data_start = &payload[RIST_MAX_PAYLOAD_OFFSET];
+    uint8_t *filtered_data = data_start;
     size_t filtered_len = buffer->size;
     uint8_t *temp_buffer = NULL;
+    uint8_t *npd_buffer = NULL;
     int filter_result = 0;
+    uint8_t actual_payload_type = buffer_type;
 
     // Apply program selection filtering for this peer
     if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
-        // Allocate temporary buffer for filtered data
-        temp_buffer = malloc(buffer->size);
+        static uint64_t last_filter_log = 0;
+        uint64_t now = timestampNTP_u64();
+
+        /* Warn if sender is using -n flag - it prevents proper filtering */
+        if (buffer_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT) {
+            if (now - last_filter_log > 10000000000ULL) {
+                rist_log_priv(get_cctx(target_peer), RIST_LOG_WARN,
+                    "Peer %u: WARNING - Do not use -n flag with program selection! Remove -n and restart sender.\n",
+                    target_peer->adv_peer_id);
+                last_filter_log = now;
+            }
+            /* Pass through unchanged - can't filter NPD'd data reliably */
+            goto send_data;
+        }
+
+        if (now - last_filter_log > 5000000000ULL) {
+            rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
+                "Peer %u: Program selection filtering ACTIVE\n",
+                target_peer->adv_peer_id);
+            last_filter_log = now;
+        }
+
+        /* Allocate temp_buffer with header space */
+        temp_buffer = malloc(buffer->size + RIST_MAX_PAYLOAD_OFFSET);
         if (temp_buffer) {
             size_t output_len = 0;
-            
-            // Apply PID filtering and NULL packet deletion
+            uint8_t *temp_payload = temp_buffer + RIST_MAX_PAYLOAD_OFFSET;
+
+            /* Apply PID filtering (replaces unwanted PIDs with NULL packets) */
             filter_result = filter_and_compress_for_peer(
-                (const uint8_t*)&payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size,
-                temp_buffer, &output_len, buffer->size,
+                (const uint8_t*)data_start, buffer->size,
+                temp_payload, &output_len, buffer->size,
                 target_peer->adv_peer_id
             );
-            
-            if (filter_result >= 0 && output_len > 0) {
-                // Use filtered data
-                filtered_data = temp_buffer;
+
+            if (filter_result >= 0) {
+                filtered_data = temp_payload;
                 filtered_len = output_len;
-                
-                if (filter_result > 0) {
-                    // Log NULL packet deletion stats
-                    rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
-                        "Peer %u: Filtered %d NULL packets, reduced size from %zu to %zu bytes\n",
-                        target_peer->adv_peer_id, filter_result, buffer->size, output_len);
+
+                /* Apply NPD to remove NULL packets we created during filtering */
+                if (filtered_len <= 7 * 204 && filtered_len > 0) {
+                    npd_buffer = malloc(sizeof(struct rist_rtp_hdr_ext) + 7 * 204 + RIST_MAX_PAYLOAD_OFFSET);
+                    if (npd_buffer) {
+                        struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)(npd_buffer + RIST_MAX_PAYLOAD_OFFSET);
+                        memset(hdr_ext, 0, sizeof(*hdr_ext));
+                        size_t npd_len = filtered_len;
+
+                        int suppressed = suppress_null_packets(filtered_data,
+                            (uint8_t*)(hdr_ext + 1), &npd_len, hdr_ext);
+
+                        if (suppressed > 0) {
+                            memcpy(&hdr_ext->identifier, "RI", 2);
+                            hdr_ext->length = htobe16(1);
+                            npd_len += sizeof(struct rist_rtp_hdr_ext);
+                            filtered_data = (uint8_t*)hdr_ext;
+                            filtered_len = npd_len;
+                            actual_payload_type = RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT;
+
+                            /* Log NPD activity at INFO level */
+                            static uint64_t last_npd_log = 0;
+                            if (now - last_npd_log > 5000000000ULL) {
+                                rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
+                                    "Peer %u: NPD active - %d NULLs removed per packet (example: %zu -> %zu bytes)\n",
+                                    target_peer->adv_peer_id, suppressed, buffer->size, filtered_len);
+                                last_npd_log = now;
+                            }
+                        }
+                    }
                 }
             } else {
-                // Filtering failed, use original data
                 rist_log_priv(get_cctx(target_peer), RIST_LOG_WARN,
-                    "Peer %u: Program selection filtering failed, sending unfiltered data\n",
-                    target_peer->adv_peer_id);
+                    "Peer %u: Filtering failed (err=%d), sending unfiltered\n",
+                    target_peer->adv_peer_id, filter_result);
+                filtered_data = data_start;
+                filtered_len = buffer->size;
             }
-        } else {
-            rist_log_priv(get_cctx(target_peer), RIST_LOG_ERROR,
-                "Peer %u: Failed to allocate filtering buffer, sending unfiltered data\n",
-                target_peer->adv_peer_id);
         }
     }
 
-    // Send the (possibly filtered) data to the peer
-    rist_send_common_rtcp(target_peer, buffer_type, filtered_data, filtered_len, source_time, src_port, dst_port, seq_rtp);
+send_data:
+    rist_send_common_rtcp(target_peer, actual_payload_type, filtered_data, filtered_len, source_time, src_port, dst_port, seq_rtp);
 
-    // Clean up temporary buffer
-    if (temp_buffer) {
-        free(temp_buffer);
-    }
+    if (npd_buffer) free(npd_buffer);
+    if (temp_buffer) free(temp_buffer);
 }
 
 
