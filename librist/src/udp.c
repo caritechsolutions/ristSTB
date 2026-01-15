@@ -1325,7 +1325,18 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	uint16_t src_port = buffer->src_port;
 	if (src_port == 0)
 		src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-	ret = rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
+
+	// Apply PID filtering for NACK retransmissions if peer has program selection
+	// This ensures recovery data is also filtered per contentSelection
+	struct rist_peer *target_peer = retry->peer->peer_data;
+	bool skip_filtering = (is_satellite_mode() && target_peer->config.weight == 0);
+	if (!skip_filtering && program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+		// Use filtered send for retransmissions
+		send_filtered_data_to_peer(target_peer, buffer, buffer->type, buffer->source_time, src_port, (target_peer->config.virt_dst_port & ~1UL), buffer->seq_rtp);
+		ret = buffer->size; // Assume success for stats
+	} else {
+		ret = rist_send_seq_rtcp(target_peer, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (target_peer->config.virt_dst_port & ~1UL), true);
+	}
 	// update bandwidth value
 	rist_calculate_bitrate(ret, retry_bw);
 
