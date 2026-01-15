@@ -154,7 +154,9 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
     uint8_t actual_payload_type = buffer_type;
 
     // Apply program selection filtering for this peer
-    if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+    // Weight 0 (satellite) peers: Send full stream - IGNORE PID selection
+    // Weight 1000 (recovery) peers: Apply PID filtering - OBEY PID selection
+    if (target_peer->config.weight != 0 && program_selection_peer_has_selection(target_peer->adv_peer_id)) {
         static uint64_t last_filter_log = 0;
         uint64_t now = timestampNTP_u64();
 
