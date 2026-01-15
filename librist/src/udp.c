@@ -156,21 +156,24 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
             last_filter_log = now;
         }
 
-        // Allocate temporary buffer for filtered data
-        temp_buffer = malloc(buffer->size);
+        /* CRITICAL: Allocate temp_buffer with RIST_MAX_PAYLOAD_OFFSET extra space
+         * at the start because rist_send_seq_rtcp writes headers BEFORE the
+         * payload pointer (memcpy(_payload - hdr_len, hdr, hdr_len)) */
+        temp_buffer = malloc(buffer->size + RIST_MAX_PAYLOAD_OFFSET);
         if (temp_buffer) {
             size_t output_len = 0;
+            uint8_t *temp_payload = temp_buffer + RIST_MAX_PAYLOAD_OFFSET;
 
             // Apply PID filtering and NULL packet deletion
             filter_result = filter_and_compress_for_peer(
                 (const uint8_t*)&payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size,
-                temp_buffer, &output_len, buffer->size,
+                temp_payload, &output_len, buffer->size,
                 target_peer->adv_peer_id
             );
 
             if (filter_result >= 0 && output_len > 0) {
-                // Use filtered data
-                filtered_data = temp_buffer;
+                // Use filtered data (point to temp_payload which has header space before it)
+                filtered_data = temp_payload;
                 filtered_len = output_len;
 
                 if (filter_result > 0) {
