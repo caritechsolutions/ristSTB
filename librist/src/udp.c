@@ -138,13 +138,18 @@ RIST_PRIV bool has_fsr_requests(void)
 // Replace the existing helper function with this corrected version:
 static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct rist_buffer *buffer, uint8_t buffer_type, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
 {
-    uint8_t *payload = (uint8_t*)buffer->data;  // Cast to uint8_t*
-    uint8_t *filtered_data = &payload[RIST_MAX_PAYLOAD_OFFSET];
+    uint8_t *payload = (uint8_t*)buffer->data;
+    uint8_t *data_start = &payload[RIST_MAX_PAYLOAD_OFFSET];
+    uint8_t *filtered_data = data_start;
     size_t filtered_len = buffer->size;
+    size_t original_ts_len = buffer->size;
     uint8_t *temp_buffer = NULL;
     uint8_t *npd_buffer = NULL;
+    uint8_t *expanded_buffer = NULL;
     int filter_result = 0;
     uint8_t actual_payload_type = buffer_type;
+    uint8_t original_npd_bits = 0;
+    bool was_npd_expanded = false;
 
     // Apply program selection filtering for this peer
     if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
@@ -158,18 +163,48 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
             last_filter_log = now;
         }
 
+        /* Check if data already has NPD applied (sender running with -n flag).
+         * If so, we need to expand NULLs first, then filter, then re-apply NPD.
+         * NPD'd data has an 8-byte RTP extension header with "RI" identifier. */
+        if (buffer_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT && buffer->size > sizeof(struct rist_rtp_hdr_ext)) {
+            struct rist_rtp_hdr_ext *existing_hdr = (struct rist_rtp_hdr_ext *)data_start;
+            if (memcmp(&existing_hdr->identifier, "RI", 2) == 0 && be16toh(existing_hdr->length) == 1) {
+                /* Data has NPD applied - need to expand NULLs first */
+                original_npd_bits = existing_hdr->npd_bits;
+
+                /* Skip past the RTP extension header to get to TS data */
+                uint8_t *ts_data = data_start + sizeof(struct rist_rtp_hdr_ext);
+                size_t ts_len = buffer->size - sizeof(struct rist_rtp_hdr_ext);
+
+                /* Allocate buffer for expanded data (up to 7 * 204 bytes) */
+                expanded_buffer = malloc(7 * 204 + RIST_MAX_PAYLOAD_OFFSET);
+                if (expanded_buffer) {
+                    uint8_t *expanded_ts = expanded_buffer + RIST_MAX_PAYLOAD_OFFSET;
+                    size_t expanded_len = ts_len;
+
+                    /* Copy TS data and expand NULLs back in */
+                    if (expand_null_packets(ts_data, expanded_ts, &expanded_len, original_npd_bits) > 0) {
+                        data_start = expanded_ts;
+                        original_ts_len = expanded_len;
+                        was_npd_expanded = true;
+                        actual_payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;  /* Reset to raw */
+                    }
+                }
+            }
+        }
+
         /* CRITICAL: Allocate temp_buffer with RIST_MAX_PAYLOAD_OFFSET extra space
          * at the start because rist_send_seq_rtcp writes headers BEFORE the
          * payload pointer (memcpy(_payload - hdr_len, hdr, hdr_len)) */
-        temp_buffer = malloc(buffer->size + RIST_MAX_PAYLOAD_OFFSET);
+        temp_buffer = malloc(original_ts_len + RIST_MAX_PAYLOAD_OFFSET);
         if (temp_buffer) {
             size_t output_len = 0;
             uint8_t *temp_payload = temp_buffer + RIST_MAX_PAYLOAD_OFFSET;
 
             // Apply PID filtering (replaces unwanted PIDs with NULL packets)
             filter_result = filter_and_compress_for_peer(
-                (const uint8_t*)&payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size,
-                temp_payload, &output_len, buffer->size,
+                (const uint8_t*)data_start, original_ts_len,
+                temp_payload, &output_len, original_ts_len,
                 target_peer->adv_peer_id
             );
 
@@ -182,8 +217,8 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                  * we created during PID filtering. This is per VSF TR-06-4 Part 6:
                  * unwanted PIDs -> NULL packets -> NPD removes them */
                 if (filtered_len <= 7 * 204 && filtered_len > 0) {
-                    /* Allocate NPD buffer: header_ext + up to 6 packets (after suppression) */
-                    npd_buffer = malloc(sizeof(struct rist_rtp_hdr_ext) + 6 * 204 + RIST_MAX_PAYLOAD_OFFSET);
+                    /* Allocate NPD buffer: header_ext + up to 7 packets */
+                    npd_buffer = malloc(sizeof(struct rist_rtp_hdr_ext) + 7 * 204 + RIST_MAX_PAYLOAD_OFFSET);
                     if (npd_buffer) {
                         struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)(npd_buffer + RIST_MAX_PAYLOAD_OFFSET);
                         memset(hdr_ext, 0, sizeof(*hdr_ext));
@@ -202,29 +237,15 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                             actual_payload_type = RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT;
 
                             rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
-                                "Peer %u: NPD suppressed %d NULL packets, size %zu -> %zu\n",
-                                target_peer->adv_peer_id, suppressed, buffer->size, filtered_len);
-                        } else {
-                            /* Debug: Log why NPD didn't suppress anything */
-                            static uint64_t last_npd_debug = 0;
-                            uint64_t now_npd = timestampNTP_u64();
-                            if (now_npd - last_npd_debug > 5000000000ULL) {
-                                rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
-                                    "Peer %u: NPD returned %d (0=no NULLs, <0=error), filtered_len=%zu\n",
-                                    target_peer->adv_peer_id, suppressed, filtered_len);
-                                last_npd_debug = now_npd;
-                            }
+                                "Peer %u: NPD suppressed %d NULL packets, size %zu -> %zu%s\n",
+                                target_peer->adv_peer_id, suppressed, original_ts_len, filtered_len,
+                                was_npd_expanded ? " (re-compressed)" : "");
+                        } else if (suppressed == 0 && was_npd_expanded) {
+                            /* No new NULLs to suppress, but data was expanded.
+                             * Keep the filtered (but not re-compressed) data */
+                            actual_payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;
                         }
-                    }
-                } else if (filtered_len > 7 * 204) {
-                    /* Debug: Log when buffer is too large for NPD */
-                    static uint64_t last_size_debug = 0;
-                    uint64_t now_size = timestampNTP_u64();
-                    if (now_size - last_size_debug > 5000000000ULL) {
-                        rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
-                            "Peer %u: Buffer too large for NPD: filtered_len=%zu > max=%d\n",
-                            target_peer->adv_peer_id, filtered_len, 7 * 204);
-                        last_size_debug = now_size;
+                        /* If suppressed < 0, error - keep filtered_data as-is */
                     }
                 }
             } else {
@@ -232,6 +253,10 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                 rist_log_priv(get_cctx(target_peer), RIST_LOG_WARN,
                     "Peer %u: Program selection filtering failed (err=%d), sending unfiltered data\n",
                     target_peer->adv_peer_id, filter_result);
+                /* Restore original data */
+                filtered_data = &payload[RIST_MAX_PAYLOAD_OFFSET];
+                filtered_len = buffer->size;
+                actual_payload_type = buffer_type;
             }
         } else {
             rist_log_priv(get_cctx(target_peer), RIST_LOG_ERROR,
@@ -249,6 +274,9 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
     }
     if (temp_buffer) {
         free(temp_buffer);
+    }
+    if (expanded_buffer) {
+        free(expanded_buffer);
     }
 }
 
