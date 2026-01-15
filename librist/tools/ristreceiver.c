@@ -88,6 +88,7 @@ static struct option long_options[] = {
 #endif
 { "config",          required_argument, NULL, 'c' },
 { "session-timeout-exit",  no_argument, NULL, 'x' },
+{ "content-selection", required_argument, NULL, 'C' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 #if HAVE_PROMETHEUS_SUPPORT
@@ -149,6 +150,8 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "          | --metrics-unix                       | Unix socket to expose metrics on                         |\n"
 #endif //HAVE_SOCK_UN_H
 #endif //HAVE_PROMETHEUS_SUPPORT
+"       -C | --content-selection JSON             | VSF TR-06-4 Part 6 content selection JSON or @file       |\n"
+"                                                 | Example: '{\"contentSelection\":[{\"requestedPrograms\":[1,2]}]}' |\n"
 "       -f | --noflow-timeout-exit value (ms)     | Exit on no flow after Timeout                            |\n"
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
@@ -553,6 +556,7 @@ int main(int argc, char *argv[])
 #if HAVE_SRP_SUPPORT
 	char *srpfile = NULL;
 #endif
+	char *content_selection_json = NULL;
 
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++)
 	{
@@ -579,7 +583,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", RISTRECEIVER_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:x:uM", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:x:uMC:", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -630,6 +634,29 @@ int main(int argc, char *argv[])
 		case 'u':
 			rist_log(&logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
+		break;
+		case 'C':
+			/* VSF TR-06-4 Part 6: Content selection JSON or @filename */
+			if (optarg[0] == '@') {
+				/* Load JSON from file */
+				FILE *f = fopen(&optarg[1], "r");
+				if (!f) {
+					rist_log(&logging_settings, RIST_LOG_ERROR, "Could not open content-selection file %s\n", &optarg[1]);
+					exit(1);
+				}
+				fseek(f, 0, SEEK_END);
+				long fsize = ftell(f);
+				fseek(f, 0, SEEK_SET);
+				content_selection_json = malloc(fsize + 1);
+				if (content_selection_json) {
+					size_t read_size = fread(content_selection_json, 1, fsize, f);
+					content_selection_json[read_size] = '\0';
+				}
+				fclose(f);
+			} else {
+				content_selection_json = strdup(optarg);
+			}
+			rist_log(&logging_settings, RIST_LOG_INFO, "Content selection: %s\n", content_selection_json);
 		break;
 #if HAVE_PROMETHEUS_SUPPORT
 		case 'M':
@@ -972,6 +999,14 @@ next:
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 		exit(1);
 	}
+
+	/* VSF TR-06-4 Part 6: Set content selection for all peers if specified */
+	if (content_selection_json) {
+		if (rist_receiver_set_content_selection(ctx, NULL, content_selection_json) != 0) {
+			rist_log(&logging_settings, RIST_LOG_WARN, "Failed to set content selection\n");
+		}
+	}
+
 	/* Start the rist protocol thread */
 	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 #ifdef _WIN32
@@ -1088,6 +1123,8 @@ next:
 #endif
 	if (shared_secret)
 		free(shared_secret);
+	if (content_selection_json)
+		free(content_selection_json);
 
 	struct ristreceiver_flow_cumulative_stats *stats, *next;
 	stats = stats_list;

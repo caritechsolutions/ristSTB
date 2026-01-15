@@ -216,6 +216,20 @@ void _librist_proto_gre_send_keepalive(struct rist_peer *p, uint8_t gre_version)
 	SET_BIT(ka.capabilities1, 5); // Bonding
 	//SET_BIT(ka.capabilities2, 3);//OTF Passphrase change
 	SET_BIT(ka.capabilities2, 5);//Reduced overhead
+
+	/* VSF TR-06-4 Part 6: Include contentSelection JSON if set */
+	if (p->content_selection_json && p->content_selection_json_len > 0) {
+		size_t total_len = sizeof(ka) + p->content_selection_json_len;
+		uint8_t *buf = malloc(total_len);
+		if (buf) {
+			memcpy(buf, &ka, sizeof(ka));
+			memcpy(buf + sizeof(ka), p->content_selection_json, p->content_selection_json_len);
+			_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, buf, total_len, 0, 0, gre_version);
+			free(buf);
+			return;
+		}
+	}
+
 	_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, (uint8_t *)&ka, sizeof(ka), 0, 0, gre_version);
 }
 

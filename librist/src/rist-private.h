@@ -608,6 +608,10 @@ struct rist_peer {
 
 	uint8_t data[SIZEOF_GRE_KEEPALIVE];
 
+	/* VSF TR-06-4 Part 6: Content Selection JSON for outgoing keepalives */
+	char *content_selection_json;
+	size_t content_selection_json_len;
+
 };
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {
