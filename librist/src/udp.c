@@ -204,9 +204,27 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                             rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
                                 "Peer %u: NPD suppressed %d NULL packets, size %zu -> %zu\n",
                                 target_peer->adv_peer_id, suppressed, buffer->size, filtered_len);
+                        } else {
+                            /* Debug: Log why NPD didn't suppress anything */
+                            static uint64_t last_npd_debug = 0;
+                            uint64_t now_npd = timestampNTP_u64();
+                            if (now_npd - last_npd_debug > 5000000000ULL) {
+                                rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
+                                    "Peer %u: NPD returned %d (0=no NULLs, <0=error), filtered_len=%zu\n",
+                                    target_peer->adv_peer_id, suppressed, filtered_len);
+                                last_npd_debug = now_npd;
+                            }
                         }
-                        /* If suppressed == 0, no NULLs found, continue with filtered_data as-is */
-                        /* If suppressed < 0, error (non-TS data), continue with filtered_data as-is */
+                    }
+                } else if (filtered_len > 7 * 204) {
+                    /* Debug: Log when buffer is too large for NPD */
+                    static uint64_t last_size_debug = 0;
+                    uint64_t now_size = timestampNTP_u64();
+                    if (now_size - last_size_debug > 5000000000ULL) {
+                        rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
+                            "Peer %u: Buffer too large for NPD: filtered_len=%zu > max=%d\n",
+                            target_peer->adv_peer_id, filtered_len, 7 * 204);
+                        last_size_debug = now_size;
                     }
                 }
             } else {
