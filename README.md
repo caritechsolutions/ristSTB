@@ -336,6 +336,8 @@ Additionally, for DVB compliance:
 
 ### Current Implementation Status
 
+#### Sender Side (Receiving contentSelection from receiver)
+
 | Component | File | Status | Notes |
 |-----------|------|--------|-------|
 | Keepalive reception | `rist-common.c:2984` | ✅ Done | Parses incoming keepalives |
@@ -353,6 +355,16 @@ Additionally, for DVB compliance:
 | Always pass PMT PIDs | `program-selection.c` | ❌ Missing | Needs PAT parsing first |
 | Always pass EMM PIDs | `program-selection.c` | ❌ Missing | Needs CAT parsing first |
 | Version monitoring | `program-selection.c` | ❌ Missing | For efficient re-parsing |
+
+#### Receiver Side (Sending contentSelection to sender)
+
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| Keepalive sending | `gre.c:211-220` | ✅ Done | Sends basic keepalive |
+| JSON storage in peer | `rist-private.h` | ❌ Missing | Need `content_selection_json` field |
+| JSON append to keepalive | `gre.c:211-220` | ❌ Missing | Need to append JSON after ka struct |
+| Keepalive JSON parsing | `gre.c:242-245` | ✅ Done | Already parses JSON after keepalive |
+| Public API | `receiver.h` | ❌ Missing | Need `rist_receiver_set_content_selection()` |
 
 ### Reference Transport Stream Analysis
 
@@ -633,6 +645,168 @@ filter_transport_stream_pids(output_data, input_len, selection);
 
 ---
 
+### TODO 9: Add ContentSelection Storage to Peer Structure
+
+**File:** `librist/src/rist-private.h`
+**Structure:** `struct rist_peer` (lines 464+)
+**Priority:** High
+
+**Current state:**
+The receiver can parse incoming contentSelection JSON (sender→receiver), but has no way to SEND contentSelection JSON (receiver→sender).
+
+**Required changes:**
+Add a field to store outgoing contentSelection JSON:
+
+```c
+struct rist_peer {
+    // ... existing fields ...
+
+    /* VSF TR-06-4 Part 6: Content Selection JSON for outgoing keepalives */
+    char *content_selection_json;      // JSON string to send in keepalives
+    size_t content_selection_json_len; // Length of JSON string
+};
+```
+
+**Reason:** Per VSF TR-06-4 Part 6, receivers must send contentSelection in keepalives to request specific programs/PIDs.
+
+---
+
+### TODO 10: Modify Keepalive Sending to Include JSON
+
+**File:** `librist/src/proto/gre.c`
+**Function:** `_librist_proto_gre_send_keepalive()` (lines 211-220)
+**Priority:** High
+
+**Current code:**
+```c
+void _librist_proto_gre_send_keepalive(struct rist_peer *p, uint8_t gre_version) {
+    struct rist_gre_keepalive ka = {0};
+    memcpy(ka.mac_array, p->mac_addr, sizeof(ka.mac_array));
+    SET_BIT(ka.capabilities1, 0); // Null packet deletion
+    SET_BIT(ka.capabilities1, 2); // SMPTE-2022-7
+    SET_BIT(ka.capabilities1, 5); // Bonding
+    SET_BIT(ka.capabilities2, 5); // Reduced overhead
+    _librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE,
+                                 (uint8_t *)&ka, sizeof(ka), 0, 0, gre_version);
+}
+```
+
+**Required changes:**
+```c
+void _librist_proto_gre_send_keepalive(struct rist_peer *p, uint8_t gre_version) {
+    struct rist_gre_keepalive ka = {0};
+    memcpy(ka.mac_array, p->mac_addr, sizeof(ka.mac_array));
+    SET_BIT(ka.capabilities1, 0); // Null packet deletion
+    SET_BIT(ka.capabilities1, 2); // SMPTE-2022-7
+    SET_BIT(ka.capabilities1, 5); // Bonding
+    SET_BIT(ka.capabilities2, 5); // Reduced overhead
+
+    // Check if we have contentSelection JSON to send
+    if (p->content_selection_json && p->content_selection_json_len > 0) {
+        // Create buffer with keepalive + JSON
+        size_t total_len = sizeof(ka) + p->content_selection_json_len;
+        uint8_t *buf = malloc(total_len);
+        if (buf) {
+            memcpy(buf, &ka, sizeof(ka));
+            memcpy(buf + sizeof(ka), p->content_selection_json, p->content_selection_json_len);
+            _librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE,
+                                         buf, total_len, 0, 0, gre_version);
+            free(buf);
+            return;
+        }
+    }
+
+    // No JSON - send standard keepalive
+    _librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE,
+                                 (uint8_t *)&ka, sizeof(ka), 0, 0, gre_version);
+}
+```
+
+**Note:** The receiver side already parses JSON after the keepalive structure (`_librist_proto_gre_parse_keepalive()` lines 242-245), so no changes needed there.
+
+---
+
+### TODO 11: Create Public API for Receiver ContentSelection
+
+**File:** `librist/include/librist/receiver.h`
+**New function:** `rist_receiver_set_content_selection()`
+**Priority:** High
+
+**Required API:**
+```c
+/**
+ * @brief Set content selection for outgoing keepalives
+ *
+ * Sets the contentSelection JSON that will be sent in keepalives to the sender.
+ * Per VSF TR-06-4 Part 6, this allows receivers to request specific programs/PIDs.
+ *
+ * @param ctx RIST receiver context
+ * @param peer The peer to set content selection for (NULL for all peers)
+ * @param json_str The JSON string containing contentSelection, or NULL to clear
+ * @return 0 on success, -1 on error
+ *
+ * Example JSON:
+ * {
+ *   "contentSelection": [{
+ *     "UDPPort": 5000,
+ *     "requestedPrograms": [1, 2, 3],
+ *     "blockedPrograms": [4, 5]
+ *   }]
+ * }
+ */
+RIST_API int rist_receiver_set_content_selection(struct rist_ctx *ctx,
+                                                  struct rist_peer *peer,
+                                                  const char *json_str);
+```
+
+**Implementation location:** `librist/src/rist.c` or new file
+
+**Implementation:**
+```c
+int rist_receiver_set_content_selection(struct rist_ctx *ctx,
+                                        struct rist_peer *peer,
+                                        const char *json_str)
+{
+    if (!ctx || !ctx->receiver_ctx) return -1;
+
+    // If specific peer provided, set only for that peer
+    if (peer) {
+        pthread_mutex_lock(&peer->peer_lock);
+        free(peer->content_selection_json);
+        if (json_str) {
+            peer->content_selection_json = strdup(json_str);
+            peer->content_selection_json_len = strlen(json_str);
+        } else {
+            peer->content_selection_json = NULL;
+            peer->content_selection_json_len = 0;
+        }
+        pthread_mutex_unlock(&peer->peer_lock);
+        return 0;
+    }
+
+    // No peer specified - set for all peers in receiver context
+    struct rist_peer *p = ctx->receiver_ctx->common.PEERS;
+    while (p) {
+        pthread_mutex_lock(&p->peer_lock);
+        free(p->content_selection_json);
+        if (json_str) {
+            p->content_selection_json = strdup(json_str);
+            p->content_selection_json_len = strlen(json_str);
+        } else {
+            p->content_selection_json = NULL;
+            p->content_selection_json_len = 0;
+        }
+        pthread_mutex_unlock(&p->peer_lock);
+        p = p->next;
+    }
+    return 0;
+}
+```
+
+**Cleanup:** Free `content_selection_json` in peer cleanup (`rist-common.c` peer removal handlers).
+
+---
+
 ### Implementation Order
 
 | Order | TODO | Complexity | Impact |
@@ -645,6 +819,9 @@ filter_transport_stream_pids(output_data, input_len, selection);
 | 6 | TODO 4: Integrate into filter loop | Medium | High - connects everything |
 | 7 | TODO 7: Integrate with standard NPD | Medium | High - proper NULL handling |
 | 8 | TODO 8: Remove custom NPD | Low | Medium - cleanup |
+| 9 | TODO 9: Add contentSelection storage | Low | High - enables receiver→sender |
+| 10 | TODO 10: Modify keepalive with JSON | Medium | High - sends contentSelection |
+| 11 | TODO 11: Create public API | Medium | High - app-level control |
 
 ### Standard librist NPD Reference
 
