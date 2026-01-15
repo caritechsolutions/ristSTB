@@ -344,17 +344,15 @@ Additionally, for DVB compliance:
 | JSON extraction | `rist-common.c:3001-3022` | ✅ Done | Extracts contentSelection |
 | Per-peer storage | `program-selection.c:42-153` | ✅ Done | Linked list by peer_id |
 | Selection check | `program-selection.c:202-206` | ✅ Done | `peer_has_selection()` |
-| PID→NULL conversion | `program-selection.c:333-378` | ✅ Done | `filter_transport_stream_pids()` |
-| NULL deletion | `program-selection.c:380-459` | ✅ Done | `apply_null_packet_deletion()` |
+| PID→NULL conversion | `program-selection.c:622-679` | ✅ Done | `filter_transport_stream_pids()` |
+| NULL deletion | Standard librist NPD | ✅ Done | Via `rist_sender_npd_enable()` |
 | Filtered send | `udp.c:139-192` | ✅ Done | `send_filtered_data_to_peer()` |
-| Always pass PAT (0) | `program-selection.c:295` | ✅ Done | Hardcoded check |
-| Always pass CAT (1) | `program-selection.c:295` | ✅ Done | Hardcoded check |
-| Always pass 0x00-0x1F | `program-selection.c` | ❌ Missing | Only 0 and 1 currently |
-| Parse PAT → PMT PIDs | `program-selection.c` | ❌ Missing | Requires PAT parsing |
-| Parse CAT → EMM PIDs | `program-selection.c` | ❌ Missing | Requires CAT parsing |
-| Always pass PMT PIDs | `program-selection.c` | ❌ Missing | Needs PAT parsing first |
-| Always pass EMM PIDs | `program-selection.c` | ❌ Missing | Needs CAT parsing first |
-| Version monitoring | `program-selection.c` | ❌ Missing | For efficient re-parsing |
+| Always pass 0x00-0x1F | `program-selection.c:378-381` | ✅ Done | All PSI/SI PIDs |
+| Parse PAT → PMT PIDs | `program-selection.c:440-516` | ✅ Done | `parse_pat_packet()` |
+| Parse CAT → EMM PIDs | `program-selection.c:540-620` | ✅ Done | `parse_cat_packet()` |
+| Always pass PMT PIDs | `program-selection.c:383-386` | ✅ Done | Via `is_pmt_pid()` |
+| Always pass EMM PIDs | `program-selection.c:388-391` | ✅ Done | Via `is_emm_pid()` |
+| Version monitoring | `psi_cache` struct | ✅ Done | `pat_version`, `cat_version` |
 
 #### Receiver Side (Sending contentSelection to sender)
 
@@ -393,256 +391,150 @@ Table Sizes:
 
 ## PID Selection TODO List
 
-### TODO 1: Expand PSI/SI Bypass Range
+### TODO 1: Expand PSI/SI Bypass Range ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**Function:** `should_include_pid()` (lines 288-331)
-**Priority:** High
+**Function:** `should_include_pid()` (lines 356-423)
+**Status:** Implemented
 
-**Current code:**
+Now passes all PSI/SI PIDs (0x00-0x1F):
 ```c
-if (pid == 0 || pid == 1) {  // PAT, CAT
-    return true;
-}
-```
-
-**Required change:**
-```c
-// Always pass all PSI/SI PIDs (0x00-0x1F)
+/* Always include all PSI/SI PIDs (0x00-0x1F) - DVB mandatory tables */
 if (pid <= 0x1F) {
     return true;
 }
 ```
 
-**Reason:** DVB requires PAT, CAT, NIT, SDT, EIT, TDT etc. to pass through for receiver functionality.
+---
+
+### TODO 2: Add PAT Parsing for PMT PID Extraction ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `parse_pat_packet()` (lines 440-516)
+**Status:** Implemented
+
+Parses PAT (PID 0x0000) to extract PMT PIDs:
+- Checks version number to avoid re-parsing
+- Extracts up to 64 PMT PIDs from program entries
+- Stores in `psi_cache.pmt_pids[]`
 
 ---
 
-### TODO 2: Add PAT Parsing for PMT PID Extraction
+### TODO 3: Add CAT Parsing for EMM PID Extraction ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**New function:** `parse_pat_for_pmt_pids()`
-**Priority:** High
+**Function:** `parse_cat_packet()` (lines 540-620)
+**Status:** Implemented
 
-**Required functionality:**
-1. Detect PID 0 packets in the stream
-2. Check version byte (byte 5 of section: `version = (byte >> 1) & 0x1F`)
-3. If version changed from cached value, parse the PAT:
-   - Skip 8-byte header
-   - Read program entries (4 bytes each): `program_number` (16 bits) + `PMT_PID` (13 bits)
-   - `program_number = 0` means NIT PID, skip it
-   - Store all PMT PIDs in a cache array
-4. Cache the version number to avoid re-parsing unchanged PATs
-
-**PAT structure:**
-```
-Byte 0:     table_id (0x00)
-Bytes 1-2:  section_syntax_indicator(1) + section_length(12)
-Bytes 3-4:  transport_stream_id
-Byte 5:     reserved(2) + version_number(5) + current_next_indicator(1)
-Bytes 6-7:  section_number, last_section_number
-Bytes 8+:   [program_number(16) + reserved(3) + PMT_PID(13)] × N
-Last 4:     CRC32
-```
-
-**Reason:** Spec requires all PMT PIDs to pass through, including for non-selected programs.
+Parses CAT (PID 0x0001) to extract EMM PIDs:
+- Checks version number to avoid re-parsing
+- Extracts EMM PIDs from CA_descriptors (tag 0x09)
+- Stores up to 16 EMM PIDs in `psi_cache.emm_pids[]`
 
 ---
 
-### TODO 3: Add CAT Parsing for EMM PID Extraction
+### TODO 4: Integrate PSI Parsing into Filter Loop ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**New function:** `parse_cat_for_emm_pids()`
-**Priority:** High
+**Function:** `filter_transport_stream_pids()` (lines 622-679)
+**Status:** Implemented
 
-**Required functionality:**
-1. Detect PID 1 packets in the stream
-2. Check version byte (same as PAT)
-3. If version changed, parse the CAT:
-   - Skip 8-byte header
-   - Iterate through CA_descriptors (descriptor_tag = 0x09)
-   - Extract EMM_PID from each descriptor (bytes 4-5, 13 bits)
-   - Store all EMM PIDs in a cache array
-4. Cache the version number
-
-**CA_descriptor structure:**
-```
-Byte 0:     descriptor_tag (0x09)
-Byte 1:     descriptor_length
-Bytes 2-3:  CA_system_ID
-Bytes 4-5:  reserved(3) + EMM_PID(13)
-Bytes 6+:   private_data (optional)
-```
-
-**Reason:** EMM PIDs carry conditional access entitlement data required for all CAS systems.
-
----
-
-### TODO 4: Integrate PSI Parsing into Filter Loop
-
-**File:** `librist/src/program-selection.c`
-**Function:** `filter_transport_stream_pids()` (lines 333-378)
-**Priority:** High
-
-**Required changes:**
-1. Before filtering, scan for PID 0 and PID 1 packets
-2. Call PAT/CAT parsers if version changed
-3. Update `should_include_pid()` to check against cached PMT/EMM PID lists
-
-**Suggested approach:**
+Single-pass integration:
 ```c
-int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
-                                const struct peer_program_selection *selection)
-{
-    // First pass: Check for PAT/CAT updates
-    for (each packet) {
-        if (pid == 0) check_and_parse_pat(packet);
-        if (pid == 1) check_and_parse_cat(packet);
-    }
+/* Extract PID */
+uint16_t pid = ((packet[1] & 0x1F) << 8) | packet[2];
 
-    // Second pass: Filter PIDs
-    for (each packet) {
-        if (!should_include_pid(pid, selection)) {
-            convert_to_null(packet);
-        }
-    }
+/* Parse PAT/CAT for PMT/EMM PID extraction */
+if (pid == 0x0000) {
+    parse_pat_packet(packet);
+} else if (pid == 0x0001) {
+    parse_cat_packet(packet);
+}
+
+/* Check if this PID should be included */
+if (!should_include_pid(pid, selection)) {
+    /* Convert to NULL packet (PID 0x1FFF) */
+    ...
 }
 ```
 
-**Alternative (more efficient):**
-- Single pass: check PAT/CAT inline while filtering
-- Use version cache to skip parsing on most packets
-
 ---
 
-### TODO 5: Add Global PID Cache Structure
+### TODO 5: Add Global PID Cache Structure ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**New data structures:**
-**Priority:** Medium
+**Data structure:** `psi_cache` (lines 25-47)
+**Status:** Implemented
 
 ```c
-// Global cache for PSI-derived PIDs
 static struct {
-    // PAT parsing state
+    /* PAT parsing state */
     uint8_t pat_version;
     bool pat_version_valid;
-    uint16_t pmt_pids[64];      // Max 64 programs
+    uint16_t pmt_pids[64];      /* Max 64 programs (PMT PIDs from PAT) */
     int pmt_pid_count;
 
-    // CAT parsing state
+    /* CAT parsing state */
     uint8_t cat_version;
     bool cat_version_valid;
-    uint16_t emm_pids[16];      // Max 16 EMM PIDs
+    uint16_t emm_pids[16];      /* Max 16 EMM PIDs (from CAT CA descriptors) */
     int emm_pid_count;
 
     pthread_mutex_t lock;
-} psi_cache = {0};
+} psi_cache;
 ```
-
-**Reason:** Centralized cache for efficient lookup during filtering.
 
 ---
 
-### TODO 6: Update should_include_pid() for PMT/EMM Bypass
+### TODO 6: Update should_include_pid() for PMT/EMM Bypass ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**Function:** `should_include_pid()` (lines 288-331)
-**Priority:** High
+**Function:** `should_include_pid()` (lines 356-423)
+**Helper functions:** `is_pmt_pid()` (lines 314-325), `is_emm_pid()` (lines 330-341)
+**Status:** Implemented
 
-**Required changes:**
 ```c
-static bool should_include_pid(uint16_t pid, const struct peer_program_selection *selection)
-{
-    // Always include PSI/SI PIDs (0x00-0x1F)
-    if (pid <= 0x1F) {
-        return true;
-    }
+/* Always include PMT PIDs (extracted from PAT parsing) */
+if (is_pmt_pid(pid)) {
+    return true;
+}
 
-    // Always include PMT PIDs (from PAT)
-    if (is_pmt_pid(pid)) {
-        return true;
-    }
-
-    // Always include EMM PIDs (from CAT)
-    if (is_emm_pid(pid)) {
-        return true;
-    }
-
-    // ... rest of existing logic for requestedPIDs/blockedPIDs
+/* Always include EMM PIDs (extracted from CAT parsing) */
+if (is_emm_pid(pid)) {
+    return true;
 }
 ```
 
 ---
 
-### TODO 7: Integrate with Standard librist NPD
+### TODO 7: Integrate with Standard librist NPD ✅ COMPLETE
 
-**File:** `librist/src/udp.c`
-**Function:** `send_filtered_data_to_peer()` (lines 139-192)
-**Priority:** High
+**File:** `librist/src/program-selection.c`
+**Function:** `filter_and_compress_for_peer()` (lines 783-830)
+**Status:** Implemented
 
-**Current problem:**
-Our `apply_null_packet_deletion()` removes NULL packets but does NOT create the RTP extension header that the receiver needs to reinsert them. The standard librist NPD (`suppress_null_packets()` in `mpegts.c`) properly handles this.
+Changed approach:
+- `filter_and_compress_for_peer()` now ONLY applies PID filtering (convert to NULL)
+- Does NOT call `apply_null_packet_deletion()`
+- Standard librist NPD handles NULL compression when enabled via `rist_sender_npd_enable()`
 
-**Solution - Use standard librist NPD:**
-
-1. **Remove our custom NPD call** - `filter_and_compress_for_peer()` should only call `filter_transport_stream_pids()`, not `apply_null_packet_deletion()`
-
-2. **Apply standard NPD after PID filtering** - Call `suppress_null_packets()` which:
-   - Removes NULL packets (PID 0x1FFF)
-   - Creates "RI" RTP extension header with NPD bitmap
-   - Allows receiver to auto-expand NULLs via `expand_null_packets()`
-
-**Required changes to `send_filtered_data_to_peer()`:**
-```c
-// After PID filtering creates NULLs...
-if (ctx->null_packet_suppression && filtered_len <= 7 * 204) {
-    struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)&npd_buf;
-    memset(npd_buf, 0, sizeof(*hdr_ext));
-
-    if (suppress_null_packets(filtered_data, &npd_buf[sizeof(*hdr_ext)],
-                              &filtered_len, hdr_ext) > 0) {
-        memcpy(&hdr_ext->identifier, "RI", 2);
-        hdr_ext->length = htobe16(1);
-        filtered_len += sizeof(*hdr_ext);
-        // Use npd_buf as payload with RTP extension type
-    }
-}
-```
-
-**Standard librist NPD functions (already implemented in `mpegts.c`):**
-| Function | Location | Purpose |
-|----------|----------|---------|
-| `suppress_null_packets()` | `mpegts.c:12` | Sender: removes NULLs, creates RTP extension |
-| `expand_null_packets()` | `mpegts.c:60` | Receiver: reinstates NULLs from RTP extension |
-
-**Receiver behavior:**
-- Automatic - detects "RI" extension header
-- Calls `expand_null_packets()` to restore NULLs
-- PCR timing preserved
+**How it works:**
+1. PID filtering converts unwanted PIDs to NULL (0x1FFF)
+2. Standard librist NPD (`suppress_null_packets()`) removes NULLs and creates RTP "RI" extension
+3. Receiver automatically reinstates NULLs via `expand_null_packets()`
+4. PCR timing preserved
 
 ---
 
-### TODO 8: Remove Custom NPD Function
+### TODO 8: Remove Custom NPD Function ✅ COMPLETE
 
 **File:** `librist/src/program-selection.c`
-**Function:** `apply_null_packet_deletion()` (lines 380-459)
-**Priority:** Medium
+**Function:** `apply_null_packet_deletion()` (lines 694-761)
+**Status:** Deprecated (function retained for backwards compatibility)
 
-Once TODO 7 is complete, our custom `apply_null_packet_deletion()` becomes redundant. It should be:
-1. Removed from `filter_and_compress_for_peer()`
-2. Optionally kept for testing/debugging, or removed entirely
-
-**Changes to `filter_and_compress_for_peer()`:**
-```c
-// BEFORE (current):
-filter_transport_stream_pids(output_data, input_len, selection);
-apply_null_packet_deletion(...);  // Remove this
-
-// AFTER:
-filter_transport_stream_pids(output_data, input_len, selection);
-// Let standard NPD in send path handle compression
-```
+- No longer called from `filter_and_compress_for_peer()`
+- Marked as `@deprecated` in documentation
+- Function kept for testing/debugging purposes only
 
 ---
 
@@ -735,16 +627,16 @@ ristreceiver -i rist://sender:5000 -o udp://127.0.0.1:6000 \
 
 ### Implementation Order
 
-| Order | TODO | Complexity | Impact |
+| Order | TODO | Complexity | Status |
 |-------|------|------------|--------|
-| 1 | TODO 1: Expand 0x00-0x1F bypass | Low | High - immediate DVB compliance |
-| 2 | TODO 5: Add PID cache structure | Low | Required for TODO 2-4 |
-| 3 | TODO 2: PAT parsing | Medium | High - PMT PIDs |
-| 4 | TODO 3: CAT parsing | Medium | High - EMM PIDs |
-| 5 | TODO 6: Update should_include_pid() | Low | High - uses cached PIDs |
-| 6 | TODO 4: Integrate into filter loop | Medium | High - connects everything |
-| 7 | TODO 7: Integrate with standard NPD | Medium | High - proper NULL handling |
-| 8 | TODO 8: Remove custom NPD | Low | Medium - cleanup |
+| 1 | TODO 1: Expand 0x00-0x1F bypass | Low | ✅ Complete |
+| 2 | TODO 5: Add PID cache structure | Low | ✅ Complete |
+| 3 | TODO 2: PAT parsing | Medium | ✅ Complete |
+| 4 | TODO 3: CAT parsing | Medium | ✅ Complete |
+| 5 | TODO 6: Update should_include_pid() | Low | ✅ Complete |
+| 6 | TODO 4: Integrate into filter loop | Medium | ✅ Complete |
+| 7 | TODO 7: Integrate with standard NPD | Medium | ✅ Complete |
+| 8 | TODO 8: Remove custom NPD | Low | ✅ Complete (deprecated) |
 | 9 | TODO 9: Add contentSelection storage | Low | ✅ Complete |
 | 10 | TODO 10: Modify keepalive with JSON | Medium | ✅ Complete |
 | 11 | TODO 11: Create public API | Medium | ✅ Complete |
