@@ -142,7 +142,9 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
     uint8_t *filtered_data = &payload[RIST_MAX_PAYLOAD_OFFSET];
     size_t filtered_len = buffer->size;
     uint8_t *temp_buffer = NULL;
+    uint8_t *npd_buffer = NULL;
     int filter_result = 0;
+    uint8_t actual_payload_type = buffer_type;
 
     // Apply program selection filtering for this peer
     if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
@@ -164,7 +166,7 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
             size_t output_len = 0;
             uint8_t *temp_payload = temp_buffer + RIST_MAX_PAYLOAD_OFFSET;
 
-            // Apply PID filtering and NULL packet deletion
+            // Apply PID filtering (replaces unwanted PIDs with NULL packets)
             filter_result = filter_and_compress_for_peer(
                 (const uint8_t*)&payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size,
                 temp_payload, &output_len, buffer->size,
@@ -176,11 +178,36 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                 filtered_data = temp_payload;
                 filtered_len = output_len;
 
-                if (filter_result > 0) {
-                    // Log NULL packet deletion stats
-                    rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
-                        "Peer %u: Filtered %d NULL packets, reduced size from %zu to %zu bytes\n",
-                        target_peer->adv_peer_id, filter_result, buffer->size, output_len);
+                /* Now apply NULL packet deletion (NPD) to remove the NULL packets
+                 * we created during PID filtering. This is per VSF TR-06-4 Part 6:
+                 * unwanted PIDs -> NULL packets -> NPD removes them */
+                if (filtered_len <= 7 * 204 && filtered_len > 0) {
+                    /* Allocate NPD buffer: header_ext + up to 6 packets (after suppression) */
+                    npd_buffer = malloc(sizeof(struct rist_rtp_hdr_ext) + 6 * 204 + RIST_MAX_PAYLOAD_OFFSET);
+                    if (npd_buffer) {
+                        struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)(npd_buffer + RIST_MAX_PAYLOAD_OFFSET);
+                        memset(hdr_ext, 0, sizeof(*hdr_ext));
+                        size_t npd_len = filtered_len;
+
+                        int suppressed = suppress_null_packets(filtered_data,
+                            (uint8_t*)(hdr_ext + 1), &npd_len, hdr_ext);
+
+                        if (suppressed > 0) {
+                            /* NULL packets were suppressed - set up RTP extension header */
+                            memcpy(&hdr_ext->identifier, "RI", 2);
+                            hdr_ext->length = htobe16(1);
+                            npd_len += sizeof(struct rist_rtp_hdr_ext);
+                            filtered_data = (uint8_t*)hdr_ext;
+                            filtered_len = npd_len;
+                            actual_payload_type = RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT;
+
+                            rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
+                                "Peer %u: NPD suppressed %d NULL packets, size %zu -> %zu\n",
+                                target_peer->adv_peer_id, suppressed, buffer->size, filtered_len);
+                        }
+                        /* If suppressed == 0, no NULLs found, continue with filtered_data as-is */
+                        /* If suppressed < 0, error (non-TS data), continue with filtered_data as-is */
+                    }
                 }
             } else {
                 // Filtering failed (filter_result < 0), use original data
@@ -196,9 +223,12 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
     }
 
     // Send the (possibly filtered) data to the peer
-    rist_send_common_rtcp(target_peer, buffer_type, filtered_data, filtered_len, source_time, src_port, dst_port, seq_rtp);
+    rist_send_common_rtcp(target_peer, actual_payload_type, filtered_data, filtered_len, source_time, src_port, dst_port, seq_rtp);
 
-    // Clean up temporary buffer
+    // Clean up temporary buffers
+    if (npd_buffer) {
+        free(npd_buffer);
+    }
     if (temp_buffer) {
         free(temp_buffer);
     }
