@@ -153,6 +153,33 @@ RIST_API void rist_receiver_data_block_free2(struct rist_data_block **block);
  */
 RIST_API int rist_receiver_data_notify_fd_set(struct rist_ctx *ctx, int fd);
 
+/**
+ * @brief Set content selection for outgoing keepalives (VSF TR-06-4 Part 6)
+ *
+ * Sets the contentSelection JSON that will be sent in keepalives to the sender.
+ * Per VSF TR-06-4 Part 6, this allows receivers to request specific programs/PIDs.
+ * The JSON is included in every keepalive message sent to the specified peer(s).
+ *
+ * @param ctx RIST receiver context
+ * @param peer The peer to set content selection for (NULL for all peers)
+ * @param json_str The JSON string containing contentSelection, or NULL to clear
+ * @return 0 on success, -1 on error
+ *
+ * Example JSON:
+ * {
+ *   "contentSelection": [{
+ *     "UDPPort": 5000,
+ *     "requestedPrograms": [1, 2, 3],
+ *     "blockedPrograms": [4, 5],
+ *     "requestedPIDs": ["0x100", "0x200"],
+ *     "blockedPIDs": ["0x300"]
+ *   }]
+ * }
+ */
+RIST_API int rist_receiver_set_content_selection(struct rist_ctx *ctx,
+                                                  struct rist_peer *peer,
+                                                  const char *json_str);
+
 #ifdef __cplusplus
 }
 #endif

@@ -253,6 +253,67 @@ int rist_receiver_data_notify_fd_set(struct rist_ctx *rist_ctx, int fd)
 	return 0;
 }
 
+int rist_receiver_set_content_selection(struct rist_ctx *rist_ctx,
+                                        struct rist_peer *peer,
+                                        const char *json_str)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "ctx is null on rist_receiver_set_content_selection call!\n");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_RECEIVER_MODE || !rist_ctx->receiver_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_set_content_selection call with CTX not set up for receiving\n");
+		return -1;
+	}
+
+	/* If specific peer provided, set only for that peer */
+	if (peer) {
+		pthread_mutex_lock(&peer->peer_lock);
+		if (peer->content_selection_json) {
+			free(peer->content_selection_json);
+			peer->content_selection_json = NULL;
+			peer->content_selection_json_len = 0;
+		}
+		if (json_str) {
+			peer->content_selection_json = strdup(json_str);
+			if (peer->content_selection_json) {
+				peer->content_selection_json_len = strlen(json_str);
+			}
+		}
+		pthread_mutex_unlock(&peer->peer_lock);
+		rist_log_priv3(RIST_LOG_INFO, "Content selection set for peer %u\n", peer->adv_peer_id);
+		return 0;
+	}
+
+	/* No peer specified - set for all peers in receiver context */
+	struct rist_common_ctx *cctx = &rist_ctx->receiver_ctx->common;
+	pthread_mutex_lock(&cctx->peerlist_lock);
+	struct rist_peer *p = cctx->PEERS;
+	int count = 0;
+	while (p) {
+		pthread_mutex_lock(&p->peer_lock);
+		if (p->content_selection_json) {
+			free(p->content_selection_json);
+			p->content_selection_json = NULL;
+			p->content_selection_json_len = 0;
+		}
+		if (json_str) {
+			p->content_selection_json = strdup(json_str);
+			if (p->content_selection_json) {
+				p->content_selection_json_len = strlen(json_str);
+			}
+		}
+		pthread_mutex_unlock(&p->peer_lock);
+		count++;
+		p = p->next;
+	}
+	pthread_mutex_unlock(&cctx->peerlist_lock);
+	rist_log_priv3(RIST_LOG_INFO, "Content selection set for %d peers\n", count);
+	return 0;
+}
+
 int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_callback_t connection_status_callback,
 										void *arg)
 {

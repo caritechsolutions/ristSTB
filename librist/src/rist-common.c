@@ -4050,6 +4050,10 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	if (peer->url)
 		free(peer->url);
 
+	/* VSF TR-06-4 Part 6: Free content selection JSON */
+	if (peer->content_selection_json)
+		free(peer->content_selection_json);
+
 	if (peer->parent != NULL && ctx->auth.disconn_cb) {
 		ctx->auth.disconn_cb(ctx->auth.arg, peer);
 	}
@@ -4205,6 +4209,10 @@ if (peer && peer->adv_peer_id) {
 #endif
 	if (peer->url)
 		free(peer->url);
+
+	/* VSF TR-06-4 Part 6: Free content selection JSON */
+	if (peer->content_selection_json)
+		free(peer->content_selection_json);
 
 	if (peer->parent != NULL && ctx->auth.disconn_cb) {
 		ctx->auth.disconn_cb(ctx->auth.arg, peer);

@@ -240,6 +240,435 @@ Multiple calls throughout `udp.c` now use `send_filtered_data_to_peer()` for con
 
 ---
 
+## PID Selection: Complete Flow and Implementation Status
+
+This section documents the full PID selection mechanism per VSF TR-06-4 Part 6, including what's implemented, what's missing, and the TODO items for completion.
+
+### Overview
+
+PID Selection allows RIST receivers to request specific programs/PIDs via OOB (Out-of-Band) messaging. The sender then filters the transport stream per-peer, replacing unwanted PIDs with NULL packets and using NULL Packet Deletion to save bandwidth.
+
+### Complete PID Selection Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PID SELECTION FLOW                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. RECEIVER SENDS CONTENT SELECTION (OOB via Keepalive)                   │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │ {                                                                │    │
+│     │   "contentSelection": [{                                        │    │
+│     │     "UDPPort": 5000,                                            │    │
+│     │     "requestedPrograms": [1, 2, 3],                             │    │
+│     │     "blockedPrograms": [4, 5],                                  │    │
+│     │     "requestedPIDs": ["0x100", "0x200-0x20F"],                  │    │
+│     │     "blockedPIDs": ["0x300"]                                    │    │
+│     │   }]                                                            │    │
+│     │ }                                                                │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                        │
+│                                    ▼                                        │
+│  2. SENDER RECEIVES KEEPALIVE (rist-common.c:2984-3022)                    │
+│     ├─ Parse JSON payload                                                  │
+│     ├─ Extract "contentSelection" array                                    │
+│     └─ Call program_selection_add_peer(peer_id, json)                      │
+│                                    │                                        │
+│                                    ▼                                        │
+│  3. STORE PER-PEER SELECTION (program-selection.c:42-153)                  │
+│     ├─ Parse requestedPrograms[], blockedPrograms[]                        │
+│     ├─ Parse requestedPIDs[], blockedPIDs[]                                │
+│     ├─ Store in peer_program_selection linked list                         │
+│     └─ Set has_selection = true                                            │
+│                                    │                                        │
+│                                    ▼                                        │
+│  4. ON EVERY DATA SEND (udp.c:139-192, 1031-1106)                         │
+│     ├─ For each peer in send loop                                          │
+│     └─ Call send_filtered_data_to_peer()                                   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  5. CHECK IF PEER HAS SELECTION (program-selection.c:202-206)             │
+│     └─ program_selection_peer_has_selection(peer_id)                       │
+│            │                                                               │
+│            ├─ NO  → Send original unfiltered data                          │
+│            └─ YES → Continue to filtering                                  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  6. FILTER AND COMPRESS (program-selection.c:462-517)                      │
+│     └─ filter_and_compress_for_peer()                                      │
+│            │                                                               │
+│            ├─ 6a. filter_transport_stream_pids()                           │
+│            │      ├─ For each TS packet (188 bytes)                        │
+│            │      ├─ Check should_include_pid()                            │
+│            │      ├─ If NO → Convert to NULL packet (PID 0x1FFF)          │
+│            │      └─ If YES → Keep packet unchanged                        │
+│            │                                                               │
+│            └─ 6b. apply_null_packet_deletion()                             │
+│                   ├─ Scan for NULL packets (PID 0x1FFF)                    │
+│                   ├─ Copy only non-NULL packets to output                  │
+│                   └─ Return compressed buffer (smaller size)               │
+│                                    │                                        │
+│                                    ▼                                        │
+│  7. SEND FILTERED DATA                                                     │
+│     └─ rist_send_common_rtcp(peer, filtered_data, reduced_size)           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PID Filtering Rules (VSF TR-06-4 Part 6, Section 4.3)
+
+Per the specification, the sender **shall always include** the following PIDs regardless of blockedPIDs:
+
+| PID | Description | Priority |
+|-----|-------------|----------|
+| **0x0000** | PAT (Program Association Table) | Mandatory |
+| **0x0001** | CAT (Conditional Access Table) | Mandatory |
+| **All PMT PIDs** | Program Map Tables (from PAT) | Mandatory |
+| **All EMM PIDs** | Entitlement Management Messages (from CAT) | Mandatory |
+
+Additionally, for DVB compliance:
+| PID Range | Description | Recommendation |
+|-----------|-------------|----------------|
+| **0x0010** | NIT (Network Information Table) | Should pass |
+| **0x0011** | SDT/BAT (Service Description) | Should pass |
+| **0x0012** | EIT (Event Information / EPG) | Should pass |
+| **0x0014** | TDT/TOT (Time and Date) | Should pass |
+
+### Current Implementation Status
+
+#### Sender Side (Receiving contentSelection from receiver)
+
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| Keepalive reception | `rist-common.c:2984` | ✅ Done | Parses incoming keepalives |
+| JSON extraction | `rist-common.c:3001-3022` | ✅ Done | Extracts contentSelection |
+| Per-peer storage | `program-selection.c:42-153` | ✅ Done | Linked list by peer_id |
+| Selection check | `program-selection.c:202-206` | ✅ Done | `peer_has_selection()` |
+| PID→NULL conversion | `program-selection.c:622-679` | ✅ Done | `filter_transport_stream_pids()` |
+| NULL deletion | Standard librist NPD | ✅ Done | Via `rist_sender_npd_enable()` |
+| Filtered send | `udp.c:139-192` | ✅ Done | `send_filtered_data_to_peer()` |
+| Always pass 0x00-0x1F | `program-selection.c:378-381` | ✅ Done | All PSI/SI PIDs |
+| Parse PAT → PMT PIDs | `program-selection.c:440-516` | ✅ Done | `parse_pat_packet()` |
+| Parse CAT → EMM PIDs | `program-selection.c:540-620` | ✅ Done | `parse_cat_packet()` |
+| Always pass PMT PIDs | `program-selection.c:383-386` | ✅ Done | Via `is_pmt_pid()` |
+| Always pass EMM PIDs | `program-selection.c:388-391` | ✅ Done | Via `is_emm_pid()` |
+| Version monitoring | `psi_cache` struct | ✅ Done | `pat_version`, `cat_version` |
+
+#### Receiver Side (Sending contentSelection to sender)
+
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| Keepalive sending | `gre.c:211-234` | ✅ Done | Sends keepalive with JSON |
+| JSON storage in peer | `rist-private.h:611-613` | ✅ Done | `content_selection_json` field |
+| JSON append to keepalive | `gre.c:220-231` | ✅ Done | Appends JSON after ka struct |
+| Keepalive JSON parsing | `gre.c:242-245` | ✅ Done | Already parses JSON after keepalive |
+| Public API | `receiver.h:156-181` | ✅ Done | `rist_receiver_set_content_selection()` |
+| CLI option | `ristreceiver.c` | ✅ Done | `--content-selection` / `-C` option |
+
+### Reference Transport Stream Analysis
+
+Based on analysis of a live DTH transport (`transport_analysis.txt`):
+
+```
+Transport Summary:
+├── Services: 34
+├── Total PIDs: 197 (128 clear, 69 scrambled)
+├── Bitrate: ~60.7 Mbps
+└── CAS Systems: 4 (Beijing Compunicate, Irdeto, Verimatrix, Cryptoguard)
+
+PIDs to Always Pass:
+├── PSI/SI (0x00-0x1F): PAT, CAT, SDT, EIT
+├── PMT PIDs: 34 (one per service, from PAT)
+├── EMM PIDs: 4 (0x0583-0x0586, from CAT)
+└── Total "always pass": ~42 PIDs
+
+Table Sizes:
+├── PAT: 34 programs × 4 bytes + 12 overhead = 148 bytes (fits in 1 packet ✅)
+└── CAT: 4 EMM entries × ~8 bytes + 12 overhead = ~44 bytes (fits in 1 packet ✅)
+```
+
+---
+
+## PID Selection TODO List
+
+### TODO 1: Expand PSI/SI Bypass Range ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `should_include_pid()` (lines 356-423)
+**Status:** Implemented
+
+Now passes all PSI/SI PIDs (0x00-0x1F):
+```c
+/* Always include all PSI/SI PIDs (0x00-0x1F) - DVB mandatory tables */
+if (pid <= 0x1F) {
+    return true;
+}
+```
+
+---
+
+### TODO 2: Add PAT Parsing for PMT PID Extraction ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `parse_pat_packet()` (lines 440-516)
+**Status:** Implemented
+
+Parses PAT (PID 0x0000) to extract PMT PIDs:
+- Checks version number to avoid re-parsing
+- Extracts up to 64 PMT PIDs from program entries
+- Stores in `psi_cache.pmt_pids[]`
+
+---
+
+### TODO 3: Add CAT Parsing for EMM PID Extraction ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `parse_cat_packet()` (lines 540-620)
+**Status:** Implemented
+
+Parses CAT (PID 0x0001) to extract EMM PIDs:
+- Checks version number to avoid re-parsing
+- Extracts EMM PIDs from CA_descriptors (tag 0x09)
+- Stores up to 16 EMM PIDs in `psi_cache.emm_pids[]`
+
+---
+
+### TODO 4: Integrate PSI Parsing into Filter Loop ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `filter_transport_stream_pids()` (lines 622-679)
+**Status:** Implemented
+
+Single-pass integration:
+```c
+/* Extract PID */
+uint16_t pid = ((packet[1] & 0x1F) << 8) | packet[2];
+
+/* Parse PAT/CAT for PMT/EMM PID extraction */
+if (pid == 0x0000) {
+    parse_pat_packet(packet);
+} else if (pid == 0x0001) {
+    parse_cat_packet(packet);
+}
+
+/* Check if this PID should be included */
+if (!should_include_pid(pid, selection)) {
+    /* Convert to NULL packet (PID 0x1FFF) */
+    ...
+}
+```
+
+---
+
+### TODO 5: Add Global PID Cache Structure ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Data structure:** `psi_cache` (lines 25-47)
+**Status:** Implemented
+
+```c
+static struct {
+    /* PAT parsing state */
+    uint8_t pat_version;
+    bool pat_version_valid;
+    uint16_t pmt_pids[64];      /* Max 64 programs (PMT PIDs from PAT) */
+    int pmt_pid_count;
+
+    /* CAT parsing state */
+    uint8_t cat_version;
+    bool cat_version_valid;
+    uint16_t emm_pids[16];      /* Max 16 EMM PIDs (from CAT CA descriptors) */
+    int emm_pid_count;
+
+    pthread_mutex_t lock;
+} psi_cache;
+```
+
+---
+
+### TODO 6: Update should_include_pid() for PMT/EMM Bypass ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `should_include_pid()` (lines 356-423)
+**Helper functions:** `is_pmt_pid()` (lines 314-325), `is_emm_pid()` (lines 330-341)
+**Status:** Implemented
+
+```c
+/* Always include PMT PIDs (extracted from PAT parsing) */
+if (is_pmt_pid(pid)) {
+    return true;
+}
+
+/* Always include EMM PIDs (extracted from CAT parsing) */
+if (is_emm_pid(pid)) {
+    return true;
+}
+```
+
+---
+
+### TODO 7: Integrate with Standard librist NPD ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `filter_and_compress_for_peer()` (lines 783-830)
+**Status:** Implemented
+
+Changed approach:
+- `filter_and_compress_for_peer()` now ONLY applies PID filtering (convert to NULL)
+- Does NOT call `apply_null_packet_deletion()`
+- Standard librist NPD handles NULL compression when enabled via `rist_sender_npd_enable()`
+
+**How it works:**
+1. PID filtering converts unwanted PIDs to NULL (0x1FFF)
+2. Standard librist NPD (`suppress_null_packets()`) removes NULLs and creates RTP "RI" extension
+3. Receiver automatically reinstates NULLs via `expand_null_packets()`
+4. PCR timing preserved
+
+---
+
+### TODO 8: Remove Custom NPD Function ✅ COMPLETE
+
+**File:** `librist/src/program-selection.c`
+**Function:** `apply_null_packet_deletion()` (lines 694-761)
+**Status:** Deprecated (function retained for backwards compatibility)
+
+- No longer called from `filter_and_compress_for_peer()`
+- Marked as `@deprecated` in documentation
+- Function kept for testing/debugging purposes only
+
+---
+
+### TODO 9: Add ContentSelection Storage to Peer Structure ✅ COMPLETE
+
+**File:** `librist/src/rist-private.h`
+**Structure:** `struct rist_peer` (lines 611-613)
+**Status:** Implemented
+
+Added fields to store outgoing contentSelection JSON:
+
+```c
+/* VSF TR-06-4 Part 6: Content Selection JSON for outgoing keepalives */
+char *content_selection_json;
+size_t content_selection_json_len;
+```
+
+**Also added:** Cleanup in `rist-common.c` peer removal handlers (lines 4053-4055 and 4213-4215).
+
+---
+
+### TODO 10: Modify Keepalive Sending to Include JSON ✅ COMPLETE
+
+**File:** `librist/src/proto/gre.c`
+**Function:** `_librist_proto_gre_send_keepalive()` (lines 211-234)
+**Status:** Implemented
+
+Added JSON appending logic to keepalive sending (lines 220-231):
+
+```c
+/* VSF TR-06-4 Part 6: Include contentSelection JSON if set */
+if (p->content_selection_json && p->content_selection_json_len > 0) {
+    size_t total_len = sizeof(ka) + p->content_selection_json_len;
+    uint8_t *buf = malloc(total_len);
+    if (buf) {
+        memcpy(buf, &ka, sizeof(ka));
+        memcpy(buf + sizeof(ka), p->content_selection_json, p->content_selection_json_len);
+        _librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, buf, total_len, 0, 0, gre_version);
+        free(buf);
+        return;
+    }
+}
+```
+
+**Note:** The receiver side already parses JSON after the keepalive structure (`_librist_proto_gre_parse_keepalive()` lines 242-245), so no changes needed there.
+
+---
+
+### TODO 11: Create Public API for Receiver ContentSelection ✅ COMPLETE
+
+**File:** `librist/include/librist/receiver.h` (lines 156-181)
+**Implementation:** `librist/src/rist.c` (lines 256-315)
+**Status:** Implemented
+
+**API:**
+```c
+RIST_API int rist_receiver_set_content_selection(struct rist_ctx *ctx,
+                                                  struct rist_peer *peer,
+                                                  const char *json_str);
+```
+
+**CLI Tool Support (ristreceiver):**
+
+Added `--content-selection` / `-C` option to `librist/tools/ristreceiver.c`:
+
+```bash
+# Direct JSON string
+ristreceiver -i rist://sender:5000 -o udp://127.0.0.1:6000 \
+  -C '{"contentSelection":[{"requestedPrograms":[1,2,3]}]}'
+
+# Load JSON from file
+ristreceiver -i rist://sender:5000 -o udp://127.0.0.1:6000 \
+  -C @/path/to/selection.json
+```
+
+**Example JSON file (selection.json):**
+```json
+{
+  "contentSelection": [{
+    "UDPPort": 5000,
+    "requestedPrograms": [1, 2, 3],
+    "blockedPrograms": [4, 5],
+    "requestedPIDs": ["0x100", "0x200"],
+    "blockedPIDs": ["0x300"]
+  }]
+}
+```
+
+---
+
+### Implementation Order
+
+| Order | TODO | Complexity | Status |
+|-------|------|------------|--------|
+| 1 | TODO 1: Expand 0x00-0x1F bypass | Low | ✅ Complete |
+| 2 | TODO 5: Add PID cache structure | Low | ✅ Complete |
+| 3 | TODO 2: PAT parsing | Medium | ✅ Complete |
+| 4 | TODO 3: CAT parsing | Medium | ✅ Complete |
+| 5 | TODO 6: Update should_include_pid() | Low | ✅ Complete |
+| 6 | TODO 4: Integrate into filter loop | Medium | ✅ Complete |
+| 7 | TODO 7: Integrate with standard NPD | Medium | ✅ Complete |
+| 8 | TODO 8: Remove custom NPD | Low | ✅ Complete (deprecated) |
+| 9 | TODO 9: Add contentSelection storage | Low | ✅ Complete |
+| 10 | TODO 10: Modify keepalive with JSON | Medium | ✅ Complete |
+| 11 | TODO 11: Create public API | Medium | ✅ Complete |
+
+### Standard librist NPD Reference
+
+**Sender enable (command line):**
+```bash
+ristsender -n -i udp://... -o rist://...
+# or
+ristsender --null-packet-deletion -i udp://... -o rist://...
+```
+
+**Sender API:**
+```c
+rist_sender_npd_enable(sender_ctx);   // Enable NPD
+rist_sender_npd_disable(sender_ctx);  // Disable NPD
+rist_sender_npd_get(sender_ctx, &npd); // Query status
+```
+
+**Receiver:** Automatic - no configuration needed. Detects "RI" extension and expands NULLs.
+
+### Section Assembly Note
+
+For the reference transport (34 services):
+- **PAT:** 148 bytes - fits in single TS packet ✅
+- **CAT:** ~44 bytes - fits in single TS packet ✅
+
+Section assembly (handling tables spanning multiple packets) is **not required** for this transport. However, for robustness with larger multiplexes (45+ programs), section assembly should be considered as a future enhancement.
+
+---
+
 ### 10. FSR Cleanup
 
 **Peer Timeout Handler** (`rist-common.c` Lines 3707-3716):
