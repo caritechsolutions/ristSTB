@@ -17,29 +17,45 @@ static pthread_mutex_t program_selection_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool program_selection_initialized = false;
 
 /* =============================================================================
- * VSF TR-06-4 Part 6: Global PSI Cache for PAT/CAT parsed PIDs
+ * VSF TR-06-4 Part 6: Global PSI Cache for PAT/CAT/PMT parsed PIDs
  * =============================================================================
- * This cache stores PIDs extracted from PAT and CAT tables that must always
- * be passed through regardless of contentSelection filtering rules.
+ * This cache stores PIDs extracted from PSI tables for program-based filtering.
  */
+
+/* Program mapping: program_number -> its elementary PIDs */
+struct program_pid_map {
+    uint16_t program_number;       /* Service ID from PAT */
+    uint16_t pmt_pid;              /* PMT PID for this program */
+    uint16_t pcr_pid;              /* PCR PID */
+    uint16_t elementary_pids[32];  /* Video, audio, data PIDs from PMT */
+    int elementary_pid_count;
+    uint8_t pmt_version;
+    bool pmt_version_valid;
+};
+
+#define MAX_PROGRAMS 64
+#define MAX_EMM_PIDS 16
+
 static struct {
     /* PAT parsing state */
     uint8_t pat_version;
     bool pat_version_valid;
-    uint16_t pmt_pids[64];      /* Max 64 programs (PMT PIDs from PAT) */
-    int pmt_pid_count;
+
+    /* Program map (from PAT + PMT parsing) */
+    struct program_pid_map programs[MAX_PROGRAMS];
+    int program_count;
 
     /* CAT parsing state */
     uint8_t cat_version;
     bool cat_version_valid;
-    uint16_t emm_pids[16];      /* Max 16 EMM PIDs (from CAT CA descriptors) */
+    uint16_t emm_pids[MAX_EMM_PIDS];  /* EMM PIDs from CAT CA descriptors */
     int emm_pid_count;
 
     pthread_mutex_t lock;
 } psi_cache = {
     .pat_version = 0,
     .pat_version_valid = false,
-    .pmt_pid_count = 0,
+    .program_count = 0,
     .cat_version = 0,
     .cat_version_valid = false,
     .emm_pid_count = 0,
@@ -54,8 +70,11 @@ static struct peer_program_selection* find_peer_selection_locked(uint32_t peer_i
 static bool should_include_pid(uint16_t pid, const struct peer_program_selection *selection);
 static void parse_pat_packet(const uint8_t *packet);
 static void parse_cat_packet(const uint8_t *packet);
+static void parse_pmt_packet(const uint8_t *packet, uint16_t pmt_pid);
 static bool is_pmt_pid(uint16_t pid);
 static bool is_emm_pid(uint16_t pid);
+static bool pid_belongs_to_program(uint16_t pid, uint16_t program_number);
+static struct program_pid_map* find_program_by_pmt_pid(uint16_t pmt_pid);
 
 int program_selection_init(void)
 {
@@ -314,13 +333,62 @@ void program_selection_debug_dump(void)
 static bool is_pmt_pid(uint16_t pid)
 {
     pthread_mutex_lock(&psi_cache.lock);
-    for (int i = 0; i < psi_cache.pmt_pid_count; i++) {
-        if (psi_cache.pmt_pids[i] == pid) {
+    for (int i = 0; i < psi_cache.program_count; i++) {
+        if (psi_cache.programs[i].pmt_pid == pid) {
             pthread_mutex_unlock(&psi_cache.lock);
             return true;
         }
     }
     pthread_mutex_unlock(&psi_cache.lock);
+    return false;
+}
+
+/**
+ * @brief Find program entry by PMT PID (must hold psi_cache.lock)
+ */
+static struct program_pid_map* find_program_by_pmt_pid(uint16_t pmt_pid)
+{
+    for (int i = 0; i < psi_cache.program_count; i++) {
+        if (psi_cache.programs[i].pmt_pid == pmt_pid) {
+            return &psi_cache.programs[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief Check if a PID belongs to a specific program (must hold psi_cache.lock)
+ *
+ * This checks:
+ * 1. Is the PID the PCR PID for this program?
+ * 2. Is the PID one of the elementary stream PIDs (video/audio/data)?
+ */
+static bool pid_belongs_to_program(uint16_t pid, uint16_t program_number)
+{
+    /* Find the program in our cache */
+    for (int i = 0; i < psi_cache.program_count; i++) {
+        struct program_pid_map *prog = &psi_cache.programs[i];
+        if (prog->program_number != program_number) {
+            continue;
+        }
+
+        /* Check PCR PID */
+        if (prog->pcr_pid == pid && prog->pcr_pid != 0x1FFF) {
+            return true;
+        }
+
+        /* Check elementary PIDs (video, audio, data from PMT) */
+        for (int j = 0; j < prog->elementary_pid_count; j++) {
+            if (prog->elementary_pids[j] == pid) {
+                return true;
+            }
+        }
+
+        /* Program found but PID doesn't belong to it */
+        return false;
+    }
+
+    /* Program not in cache (PMT not parsed yet) */
     return false;
 }
 
@@ -412,9 +480,42 @@ static bool should_include_pid(uint16_t pid, const struct peer_program_selection
         }
     }
 
+    /* =======================================================================
+     * Check if PID belongs to a requested program (program-based filtering)
+     * This requires PMT parsing to map program_number -> elementary PIDs
+     * ======================================================================= */
+    if (selection->requested_programs) {
+        pthread_mutex_lock(&psi_cache.lock);
+        for (int i = 0; selection->requested_programs[i] != 0; i++) {
+            uint16_t program_number = selection->requested_programs[i];
+            if (pid_belongs_to_program(pid, program_number)) {
+                pthread_mutex_unlock(&psi_cache.lock);
+                return true;  /* PID belongs to a requested program */
+            }
+        }
+        pthread_mutex_unlock(&psi_cache.lock);
+        /* PID doesn't belong to any requested program - exclude it */
+        return false;
+    }
+
+    /* =======================================================================
+     * Check if PID belongs to a blocked program
+     * ======================================================================= */
+    if (selection->blocked_programs) {
+        pthread_mutex_lock(&psi_cache.lock);
+        for (int i = 0; selection->blocked_programs[i] != 0; i++) {
+            uint16_t program_number = selection->blocked_programs[i];
+            if (pid_belongs_to_program(pid, program_number)) {
+                pthread_mutex_unlock(&psi_cache.lock);
+                return false;  /* PID belongs to a blocked program */
+            }
+        }
+        pthread_mutex_unlock(&psi_cache.lock);
+    }
+
     /* Default behavior based on what's specified */
-    if (selection->requested_programs || selection->requested_pids) {
-        /* If specific requests made, default to exclude */
+    if (selection->requested_pids) {
+        /* If specific PIDs requested, default to exclude others */
         return false;
     }
 
@@ -423,7 +524,7 @@ static bool should_include_pid(uint16_t pid, const struct peer_program_selection
 }
 
 /**
- * @brief Parse PAT (Program Association Table) to extract PMT PIDs
+ * @brief Parse PAT (Program Association Table) to extract program -> PMT PID mapping
  *
  * PAT structure (PID 0x0000, table_id 0x00):
  * - Byte 0: table_id (0x00)
@@ -491,22 +592,30 @@ static void parse_pat_packet(const uint8_t *packet)
         return;  /* No change */
     }
 
+    /* Clear existing program mappings (PAT changed) */
+    psi_cache.program_count = 0;
+
     /* Parse program entries */
-    psi_cache.pmt_pid_count = 0;
     int data_len = section_length - 5 - 4;  /* Subtract header and CRC */
     const uint8_t *data = &section[8];
 
-    for (int i = 0; i < data_len && psi_cache.pmt_pid_count < 64; i += 4) {
+    for (int i = 0; i < data_len && psi_cache.program_count < MAX_PROGRAMS; i += 4) {
         uint16_t program_number = (data[i] << 8) | data[i + 1];
-        uint16_t pid = ((data[i + 2] & 0x1F) << 8) | data[i + 3];
+        uint16_t pmt_pid = ((data[i + 2] & 0x1F) << 8) | data[i + 3];
 
         if (program_number == 0) {
             /* program_number 0 = NIT PID, skip */
             continue;
         }
 
-        /* Store PMT PID */
-        psi_cache.pmt_pids[psi_cache.pmt_pid_count++] = pid;
+        /* Create program entry with PMT PID (elementary PIDs filled by PMT parsing) */
+        struct program_pid_map *prog = &psi_cache.programs[psi_cache.program_count];
+        prog->program_number = program_number;
+        prog->pmt_pid = pmt_pid;
+        prog->pcr_pid = 0x1FFF;  /* Will be set by PMT parsing */
+        prog->elementary_pid_count = 0;
+        prog->pmt_version_valid = false;  /* PMT not parsed yet */
+        psi_cache.program_count++;
     }
 
     psi_cache.pat_version = version;
@@ -619,6 +728,128 @@ static void parse_cat_packet(const uint8_t *packet)
     pthread_mutex_unlock(&psi_cache.lock);
 }
 
+/**
+ * @brief Parse PMT (Program Map Table) to extract elementary stream PIDs
+ *
+ * PMT structure (table_id 0x02):
+ * - Byte 0: table_id (0x02)
+ * - Bytes 1-2: section_syntax_indicator(1) + '0'(1) + reserved(2) + section_length(12)
+ * - Bytes 3-4: program_number (service_id)
+ * - Byte 5: reserved(2) + version_number(5) + current_next_indicator(1)
+ * - Byte 6: section_number
+ * - Byte 7: last_section_number
+ * - Bytes 8-9: reserved(3) + PCR_PID(13)
+ * - Bytes 10-11: reserved(4) + program_info_length(12)
+ * - Bytes 12+program_info_length: program descriptors
+ * - Then: [stream_type(8) + reserved(3) + elementary_PID(13) + reserved(4) + ES_info_length(12) + descriptors] × N
+ * - Last 4 bytes: CRC32
+ *
+ * @param packet Pointer to TS packet (must be 188 bytes, sync byte verified)
+ * @param pmt_pid The PID this packet was received on (to find program entry)
+ */
+static void parse_pmt_packet(const uint8_t *packet, uint16_t pmt_pid)
+{
+    /* Check for payload unit start indicator */
+    if (!(packet[1] & 0x40)) {
+        return;  /* Not start of section */
+    }
+
+    /* Get adaptation field control */
+    uint8_t afc = (packet[3] >> 4) & 0x03;
+    int payload_offset = 4;
+
+    /* Skip adaptation field if present */
+    if (afc == 0x02) {
+        return;  /* No payload */
+    } else if (afc == 0x03) {
+        payload_offset += 1 + packet[4];  /* Skip adaptation field */
+    }
+
+    /* Skip pointer field */
+    payload_offset += packet[payload_offset] + 1;
+
+    if (payload_offset >= 188) {
+        return;  /* Invalid */
+    }
+
+    const uint8_t *section = &packet[payload_offset];
+
+    /* Verify table_id is 0x02 (PMT) */
+    if (section[0] != 0x02) {
+        return;
+    }
+
+    /* Get section length */
+    uint16_t section_length = ((section[1] & 0x0F) << 8) | section[2];
+    if (section_length < 13 || payload_offset + 3 + section_length > 188) {
+        return;  /* Invalid or spans multiple packets - not supported for now */
+    }
+
+    /* Get program number */
+    uint16_t program_number = (section[3] << 8) | section[4];
+
+    /* Get version number */
+    uint8_t version = (section[5] >> 1) & 0x1F;
+    bool current = section[5] & 0x01;
+
+    if (!current) {
+        return;  /* Not current, ignore */
+    }
+
+    pthread_mutex_lock(&psi_cache.lock);
+
+    /* Find program entry by PMT PID */
+    struct program_pid_map *prog = find_program_by_pmt_pid(pmt_pid);
+    if (!prog) {
+        pthread_mutex_unlock(&psi_cache.lock);
+        return;  /* Program not in PAT yet */
+    }
+
+    /* Verify program number matches */
+    if (prog->program_number != program_number) {
+        pthread_mutex_unlock(&psi_cache.lock);
+        return;  /* Mismatch - shouldn't happen */
+    }
+
+    /* Check if version changed */
+    if (prog->pmt_version_valid && prog->pmt_version == version) {
+        pthread_mutex_unlock(&psi_cache.lock);
+        return;  /* No change */
+    }
+
+    /* Get PCR PID */
+    prog->pcr_pid = ((section[8] & 0x1F) << 8) | section[9];
+
+    /* Get program info length (skip program-level descriptors) */
+    uint16_t prog_info_len = ((section[10] & 0x0F) << 8) | section[11];
+
+    /* Parse elementary stream info */
+    prog->elementary_pid_count = 0;
+    int pos = 12 + prog_info_len;
+    int end = section_length - 4;  /* Exclude CRC */
+
+    while (pos < end && prog->elementary_pid_count < 32) {
+        if (pos + 5 > end) {
+            break;
+        }
+
+        /* Get stream type and elementary PID */
+        /* uint8_t stream_type = section[pos]; */
+        uint16_t es_pid = ((section[pos + 1] & 0x1F) << 8) | section[pos + 2];
+        uint16_t es_info_len = ((section[pos + 3] & 0x0F) << 8) | section[pos + 4];
+
+        /* Store elementary PID */
+        prog->elementary_pids[prog->elementary_pid_count++] = es_pid;
+
+        pos += 5 + es_info_len;
+    }
+
+    prog->pmt_version = version;
+    prog->pmt_version_valid = true;
+
+    pthread_mutex_unlock(&psi_cache.lock);
+}
+
 int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
                                const struct peer_program_selection *selection)
 {
@@ -660,15 +891,20 @@ int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
         uint16_t pid = ((packet[1] & 0x1F) << 8) | packet[2];
 
         /* =================================================================
-         * VSF TR-06-4 Part 6: Parse PAT/CAT for PMT/EMM PID extraction
+         * VSF TR-06-4 Part 6: Parse PAT/CAT/PMT for PID extraction
          * =================================================================
-         * Before filtering, check if this packet contains PAT or CAT data
-         * that we need to parse to update our PMT/EMM PID cache.
+         * Before filtering, parse PSI tables to build our program -> PID map:
+         * - PAT (0x0000): Maps program_number -> PMT_PID
+         * - CAT (0x0001): Extracts EMM PIDs from CA descriptors
+         * - PMT (various): Extracts elementary PIDs (video/audio) per program
          */
         if (pid == 0x0000) {
             parse_pat_packet(packet);
         } else if (pid == 0x0001) {
             parse_cat_packet(packet);
+        } else if (is_pmt_pid(pid)) {
+            /* This is a PMT - parse to get elementary stream PIDs */
+            parse_pmt_packet(packet, pid);
         }
 
         /* Check if this PID should be included */
