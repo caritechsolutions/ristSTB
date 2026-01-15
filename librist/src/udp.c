@@ -146,23 +146,33 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
 
     // Apply program selection filtering for this peer
     if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+        /* Log at INFO level when filtering is active (periodic to avoid spam) */
+        static uint64_t last_filter_log = 0;
+        uint64_t now = timestampNTP_u64();
+        if (now - last_filter_log > 5000000000ULL) { /* Log every ~5 seconds */
+            rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
+                "Peer %u: Program selection filtering ACTIVE\n",
+                target_peer->adv_peer_id);
+            last_filter_log = now;
+        }
+
         // Allocate temporary buffer for filtered data
         temp_buffer = malloc(buffer->size);
         if (temp_buffer) {
             size_t output_len = 0;
-            
+
             // Apply PID filtering and NULL packet deletion
             filter_result = filter_and_compress_for_peer(
                 (const uint8_t*)&payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size,
                 temp_buffer, &output_len, buffer->size,
                 target_peer->adv_peer_id
             );
-            
+
             if (filter_result >= 0 && output_len > 0) {
                 // Use filtered data
                 filtered_data = temp_buffer;
                 filtered_len = output_len;
-                
+
                 if (filter_result > 0) {
                     // Log NULL packet deletion stats
                     rist_log_priv(get_cctx(target_peer), RIST_LOG_DEBUG,
