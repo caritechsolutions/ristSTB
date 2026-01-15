@@ -622,13 +622,24 @@ static void parse_cat_packet(const uint8_t *packet)
 int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
                                const struct peer_program_selection *selection)
 {
+    /* Handle edge cases - pass through unchanged */
     if (!ts_data || ts_len == 0) {
-        return -1;
+        return 0;  /* Empty data - nothing to filter */
     }
 
-    /* Ensure buffer is multiple of 188 bytes (transport packet size) */
+    /* Check if this looks like MPEG-TS data:
+     * - Must be multiple of 188 bytes
+     * - First byte should be sync byte 0x47
+     * If not TS, return success without filtering (pass through) */
     if (ts_len % 188 != 0) {
-        return -1;
+        /* Not MPEG-TS - pass through unchanged (not an error) */
+        return 0;
+    }
+
+    /* Check for TS sync byte */
+    if (ts_data[0] != 0x47) {
+        /* Doesn't look like TS - pass through unchanged */
+        return 0;
     }
 
     if (!selection || !selection->has_selection) {
@@ -797,7 +808,17 @@ int filter_and_compress_for_peer(const uint8_t *input_data, size_t input_len,
                                 uint8_t *output_data, size_t *output_len,
                                 size_t max_output_len, uint32_t peer_id)
 {
-    if (!input_data || !output_data || !output_len) {
+    if (!output_len) {
+        return -1;
+    }
+
+    /* Handle empty input - just set output_len to 0 and return success */
+    if (!input_data || input_len == 0) {
+        *output_len = 0;
+        return 0;
+    }
+
+    if (!output_data) {
         return -1;
     }
 

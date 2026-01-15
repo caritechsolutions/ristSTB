@@ -171,8 +171,8 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                 target_peer->adv_peer_id
             );
 
-            if (filter_result >= 0 && output_len > 0) {
-                // Use filtered data (point to temp_payload which has header space before it)
+            if (filter_result >= 0) {
+                // Filtering succeeded - use filtered data
                 filtered_data = temp_payload;
                 filtered_len = output_len;
 
@@ -183,10 +183,10 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
                         target_peer->adv_peer_id, filter_result, buffer->size, output_len);
                 }
             } else {
-                // Filtering failed, use original data
+                // Filtering failed (filter_result < 0), use original data
                 rist_log_priv(get_cctx(target_peer), RIST_LOG_WARN,
-                    "Peer %u: Program selection filtering failed, sending unfiltered data\n",
-                    target_peer->adv_peer_id);
+                    "Peer %u: Program selection filtering failed (err=%d), sending unfiltered data\n",
+                    target_peer->adv_peer_id, filter_result);
             }
         } else {
             rist_log_priv(get_cctx(target_peer), RIST_LOG_ERROR,
