@@ -240,6 +240,369 @@ Multiple calls throughout `udp.c` now use `send_filtered_data_to_peer()` for con
 
 ---
 
+## PID Selection: Complete Flow and Implementation Status
+
+This section documents the full PID selection mechanism per VSF TR-06-4 Part 6, including what's implemented, what's missing, and the TODO items for completion.
+
+### Overview
+
+PID Selection allows RIST receivers to request specific programs/PIDs via OOB (Out-of-Band) messaging. The sender then filters the transport stream per-peer, replacing unwanted PIDs with NULL packets and using NULL Packet Deletion to save bandwidth.
+
+### Complete PID Selection Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PID SELECTION FLOW                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. RECEIVER SENDS CONTENT SELECTION (OOB via Keepalive)                   │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │ {                                                                │    │
+│     │   "contentSelection": [{                                        │    │
+│     │     "UDPPort": 5000,                                            │    │
+│     │     "requestedPrograms": [1, 2, 3],                             │    │
+│     │     "blockedPrograms": [4, 5],                                  │    │
+│     │     "requestedPIDs": ["0x100", "0x200-0x20F"],                  │    │
+│     │     "blockedPIDs": ["0x300"]                                    │    │
+│     │   }]                                                            │    │
+│     │ }                                                                │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                        │
+│                                    ▼                                        │
+│  2. SENDER RECEIVES KEEPALIVE (rist-common.c:2984-3022)                    │
+│     ├─ Parse JSON payload                                                  │
+│     ├─ Extract "contentSelection" array                                    │
+│     └─ Call program_selection_add_peer(peer_id, json)                      │
+│                                    │                                        │
+│                                    ▼                                        │
+│  3. STORE PER-PEER SELECTION (program-selection.c:42-153)                  │
+│     ├─ Parse requestedPrograms[], blockedPrograms[]                        │
+│     ├─ Parse requestedPIDs[], blockedPIDs[]                                │
+│     ├─ Store in peer_program_selection linked list                         │
+│     └─ Set has_selection = true                                            │
+│                                    │                                        │
+│                                    ▼                                        │
+│  4. ON EVERY DATA SEND (udp.c:139-192, 1031-1106)                         │
+│     ├─ For each peer in send loop                                          │
+│     └─ Call send_filtered_data_to_peer()                                   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  5. CHECK IF PEER HAS SELECTION (program-selection.c:202-206)             │
+│     └─ program_selection_peer_has_selection(peer_id)                       │
+│            │                                                               │
+│            ├─ NO  → Send original unfiltered data                          │
+│            └─ YES → Continue to filtering                                  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  6. FILTER AND COMPRESS (program-selection.c:462-517)                      │
+│     └─ filter_and_compress_for_peer()                                      │
+│            │                                                               │
+│            ├─ 6a. filter_transport_stream_pids()                           │
+│            │      ├─ For each TS packet (188 bytes)                        │
+│            │      ├─ Check should_include_pid()                            │
+│            │      ├─ If NO → Convert to NULL packet (PID 0x1FFF)          │
+│            │      └─ If YES → Keep packet unchanged                        │
+│            │                                                               │
+│            └─ 6b. apply_null_packet_deletion()                             │
+│                   ├─ Scan for NULL packets (PID 0x1FFF)                    │
+│                   ├─ Copy only non-NULL packets to output                  │
+│                   └─ Return compressed buffer (smaller size)               │
+│                                    │                                        │
+│                                    ▼                                        │
+│  7. SEND FILTERED DATA                                                     │
+│     └─ rist_send_common_rtcp(peer, filtered_data, reduced_size)           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PID Filtering Rules (VSF TR-06-4 Part 6, Section 4.3)
+
+Per the specification, the sender **shall always include** the following PIDs regardless of blockedPIDs:
+
+| PID | Description | Priority |
+|-----|-------------|----------|
+| **0x0000** | PAT (Program Association Table) | Mandatory |
+| **0x0001** | CAT (Conditional Access Table) | Mandatory |
+| **All PMT PIDs** | Program Map Tables (from PAT) | Mandatory |
+| **All EMM PIDs** | Entitlement Management Messages (from CAT) | Mandatory |
+
+Additionally, for DVB compliance:
+| PID Range | Description | Recommendation |
+|-----------|-------------|----------------|
+| **0x0010** | NIT (Network Information Table) | Should pass |
+| **0x0011** | SDT/BAT (Service Description) | Should pass |
+| **0x0012** | EIT (Event Information / EPG) | Should pass |
+| **0x0014** | TDT/TOT (Time and Date) | Should pass |
+
+### Current Implementation Status
+
+| Component | File | Status | Notes |
+|-----------|------|--------|-------|
+| Keepalive reception | `rist-common.c:2984` | ✅ Done | Parses incoming keepalives |
+| JSON extraction | `rist-common.c:3001-3022` | ✅ Done | Extracts contentSelection |
+| Per-peer storage | `program-selection.c:42-153` | ✅ Done | Linked list by peer_id |
+| Selection check | `program-selection.c:202-206` | ✅ Done | `peer_has_selection()` |
+| PID→NULL conversion | `program-selection.c:333-378` | ✅ Done | `filter_transport_stream_pids()` |
+| NULL deletion | `program-selection.c:380-459` | ✅ Done | `apply_null_packet_deletion()` |
+| Filtered send | `udp.c:139-192` | ✅ Done | `send_filtered_data_to_peer()` |
+| Always pass PAT (0) | `program-selection.c:295` | ✅ Done | Hardcoded check |
+| Always pass CAT (1) | `program-selection.c:295` | ✅ Done | Hardcoded check |
+| Always pass 0x00-0x1F | `program-selection.c` | ❌ Missing | Only 0 and 1 currently |
+| Parse PAT → PMT PIDs | `program-selection.c` | ❌ Missing | Requires PAT parsing |
+| Parse CAT → EMM PIDs | `program-selection.c` | ❌ Missing | Requires CAT parsing |
+| Always pass PMT PIDs | `program-selection.c` | ❌ Missing | Needs PAT parsing first |
+| Always pass EMM PIDs | `program-selection.c` | ❌ Missing | Needs CAT parsing first |
+| Version monitoring | `program-selection.c` | ❌ Missing | For efficient re-parsing |
+
+### Reference Transport Stream Analysis
+
+Based on analysis of a live DTH transport (`transport_analysis.txt`):
+
+```
+Transport Summary:
+├── Services: 34
+├── Total PIDs: 197 (128 clear, 69 scrambled)
+├── Bitrate: ~60.7 Mbps
+└── CAS Systems: 4 (Beijing Compunicate, Irdeto, Verimatrix, Cryptoguard)
+
+PIDs to Always Pass:
+├── PSI/SI (0x00-0x1F): PAT, CAT, SDT, EIT
+├── PMT PIDs: 34 (one per service, from PAT)
+├── EMM PIDs: 4 (0x0583-0x0586, from CAT)
+└── Total "always pass": ~42 PIDs
+
+Table Sizes:
+├── PAT: 34 programs × 4 bytes + 12 overhead = 148 bytes (fits in 1 packet ✅)
+└── CAT: 4 EMM entries × ~8 bytes + 12 overhead = ~44 bytes (fits in 1 packet ✅)
+```
+
+---
+
+## PID Selection TODO List
+
+### TODO 1: Expand PSI/SI Bypass Range
+
+**File:** `librist/src/program-selection.c`
+**Function:** `should_include_pid()` (lines 288-331)
+**Priority:** High
+
+**Current code:**
+```c
+if (pid == 0 || pid == 1) {  // PAT, CAT
+    return true;
+}
+```
+
+**Required change:**
+```c
+// Always pass all PSI/SI PIDs (0x00-0x1F)
+if (pid <= 0x1F) {
+    return true;
+}
+```
+
+**Reason:** DVB requires PAT, CAT, NIT, SDT, EIT, TDT etc. to pass through for receiver functionality.
+
+---
+
+### TODO 2: Add PAT Parsing for PMT PID Extraction
+
+**File:** `librist/src/program-selection.c`
+**New function:** `parse_pat_for_pmt_pids()`
+**Priority:** High
+
+**Required functionality:**
+1. Detect PID 0 packets in the stream
+2. Check version byte (byte 5 of section: `version = (byte >> 1) & 0x1F`)
+3. If version changed from cached value, parse the PAT:
+   - Skip 8-byte header
+   - Read program entries (4 bytes each): `program_number` (16 bits) + `PMT_PID` (13 bits)
+   - `program_number = 0` means NIT PID, skip it
+   - Store all PMT PIDs in a cache array
+4. Cache the version number to avoid re-parsing unchanged PATs
+
+**PAT structure:**
+```
+Byte 0:     table_id (0x00)
+Bytes 1-2:  section_syntax_indicator(1) + section_length(12)
+Bytes 3-4:  transport_stream_id
+Byte 5:     reserved(2) + version_number(5) + current_next_indicator(1)
+Bytes 6-7:  section_number, last_section_number
+Bytes 8+:   [program_number(16) + reserved(3) + PMT_PID(13)] × N
+Last 4:     CRC32
+```
+
+**Reason:** Spec requires all PMT PIDs to pass through, including for non-selected programs.
+
+---
+
+### TODO 3: Add CAT Parsing for EMM PID Extraction
+
+**File:** `librist/src/program-selection.c`
+**New function:** `parse_cat_for_emm_pids()`
+**Priority:** High
+
+**Required functionality:**
+1. Detect PID 1 packets in the stream
+2. Check version byte (same as PAT)
+3. If version changed, parse the CAT:
+   - Skip 8-byte header
+   - Iterate through CA_descriptors (descriptor_tag = 0x09)
+   - Extract EMM_PID from each descriptor (bytes 4-5, 13 bits)
+   - Store all EMM PIDs in a cache array
+4. Cache the version number
+
+**CA_descriptor structure:**
+```
+Byte 0:     descriptor_tag (0x09)
+Byte 1:     descriptor_length
+Bytes 2-3:  CA_system_ID
+Bytes 4-5:  reserved(3) + EMM_PID(13)
+Bytes 6+:   private_data (optional)
+```
+
+**Reason:** EMM PIDs carry conditional access entitlement data required for all CAS systems.
+
+---
+
+### TODO 4: Integrate PSI Parsing into Filter Loop
+
+**File:** `librist/src/program-selection.c`
+**Function:** `filter_transport_stream_pids()` (lines 333-378)
+**Priority:** High
+
+**Required changes:**
+1. Before filtering, scan for PID 0 and PID 1 packets
+2. Call PAT/CAT parsers if version changed
+3. Update `should_include_pid()` to check against cached PMT/EMM PID lists
+
+**Suggested approach:**
+```c
+int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
+                                const struct peer_program_selection *selection)
+{
+    // First pass: Check for PAT/CAT updates
+    for (each packet) {
+        if (pid == 0) check_and_parse_pat(packet);
+        if (pid == 1) check_and_parse_cat(packet);
+    }
+
+    // Second pass: Filter PIDs
+    for (each packet) {
+        if (!should_include_pid(pid, selection)) {
+            convert_to_null(packet);
+        }
+    }
+}
+```
+
+**Alternative (more efficient):**
+- Single pass: check PAT/CAT inline while filtering
+- Use version cache to skip parsing on most packets
+
+---
+
+### TODO 5: Add Global PID Cache Structure
+
+**File:** `librist/src/program-selection.c`
+**New data structures:**
+**Priority:** Medium
+
+```c
+// Global cache for PSI-derived PIDs
+static struct {
+    // PAT parsing state
+    uint8_t pat_version;
+    bool pat_version_valid;
+    uint16_t pmt_pids[64];      // Max 64 programs
+    int pmt_pid_count;
+
+    // CAT parsing state
+    uint8_t cat_version;
+    bool cat_version_valid;
+    uint16_t emm_pids[16];      // Max 16 EMM PIDs
+    int emm_pid_count;
+
+    pthread_mutex_t lock;
+} psi_cache = {0};
+```
+
+**Reason:** Centralized cache for efficient lookup during filtering.
+
+---
+
+### TODO 6: Update should_include_pid() for PMT/EMM Bypass
+
+**File:** `librist/src/program-selection.c`
+**Function:** `should_include_pid()` (lines 288-331)
+**Priority:** High
+
+**Required changes:**
+```c
+static bool should_include_pid(uint16_t pid, const struct peer_program_selection *selection)
+{
+    // Always include PSI/SI PIDs (0x00-0x1F)
+    if (pid <= 0x1F) {
+        return true;
+    }
+
+    // Always include PMT PIDs (from PAT)
+    if (is_pmt_pid(pid)) {
+        return true;
+    }
+
+    // Always include EMM PIDs (from CAT)
+    if (is_emm_pid(pid)) {
+        return true;
+    }
+
+    // ... rest of existing logic for requestedPIDs/blockedPIDs
+}
+```
+
+---
+
+### TODO 7: Add NULL Packet Reinsertion (Receiver Side)
+
+**File:** `librist/src/program-selection.c` or new file
+**New function:** `apply_null_packet_reinsertion()`
+**Priority:** Low (future enhancement)
+
+**Purpose:** On the receiver side, reinsert NULL packets to restore original PCR timing.
+
+**Note:** The current `apply_null_packet_deletion()` has a TODO at line 456:
+```c
+// TODO: Create RTP extension header with null_pattern for receiver reconstruction
+```
+
+This requires:
+1. Sender to include null_pattern in RTP extension header
+2. Receiver to read pattern and reinsert NULLs at correct positions
+
+---
+
+### Implementation Order
+
+| Order | TODO | Complexity | Impact |
+|-------|------|------------|--------|
+| 1 | TODO 1: Expand 0x00-0x1F bypass | Low | High - immediate DVB compliance |
+| 2 | TODO 5: Add PID cache structure | Low | Required for TODO 2-4 |
+| 3 | TODO 2: PAT parsing | Medium | High - PMT PIDs |
+| 4 | TODO 3: CAT parsing | Medium | High - EMM PIDs |
+| 5 | TODO 6: Update should_include_pid() | Low | High - uses cached PIDs |
+| 6 | TODO 4: Integrate into filter loop | Medium | High - connects everything |
+| 7 | TODO 7: NULL reinsertion | High | Low - future enhancement |
+
+### Section Assembly Note
+
+For the reference transport (34 services):
+- **PAT:** 148 bytes - fits in single TS packet ✅
+- **CAT:** ~44 bytes - fits in single TS packet ✅
+
+Section assembly (handling tables spanning multiple packets) is **not required** for this transport. However, for robustness with larger multiplexes (45+ programs), section assembly should be considered as a future enhancement.
+
+---
+
 ### 10. FSR Cleanup
 
 **Peer Timeout Handler** (`rist-common.c` Lines 3707-3716):
