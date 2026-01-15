@@ -38,6 +38,10 @@ static int fsr_peer_count = 0;
 static int fsr_peers_capacity = 0;
 static pthread_mutex_t fsr_lock = PTHREAD_MUTEX_INITIALIZER;
 
+// Track if satellite architecture is in use (weight-1000 peer exists)
+// When true, weight-0 peers skip PID filtering (send full stream to satellite)
+static bool satellite_mode_active = false;
+
 // Helper function to check if a peer ID is in the FSR list
 RIST_PRIV bool peer_id_in_fsr_list(uint32_t peer_id) 
 {
@@ -131,6 +135,18 @@ RIST_PRIV bool has_fsr_requests(void)
 	return has_requests;
 }
 
+// Enable satellite mode when a weight-1000 peer is detected
+RIST_PRIV void enable_satellite_mode(void)
+{
+	satellite_mode_active = true;
+}
+
+// Check if satellite mode is active (weight-1000 peer exists)
+RIST_PRIV bool is_satellite_mode(void)
+{
+	return satellite_mode_active;
+}
+
 // ========== END OF FSR GLOBALS SECTION ==========
 
 
@@ -154,7 +170,12 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
     uint8_t actual_payload_type = buffer_type;
 
     // Apply program selection filtering for this peer
-    if (program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+    // In satellite mode (weight-1000 peer exists):
+    //   - Weight 0 (satellite) peers: Send full stream - IGNORE PID selection
+    //   - Weight 1000 (recovery) peers: Apply PID filtering - OBEY PID selection
+    // In simple test mode (no weight-1000 peer): Apply filtering for all peers
+    bool skip_filtering = (is_satellite_mode() && target_peer->config.weight == 0);
+    if (!skip_filtering && program_selection_peer_has_selection(target_peer->adv_peer_id)) {
         static uint64_t last_filter_log = 0;
         uint64_t now = timestampNTP_u64();
 
@@ -956,6 +977,11 @@ peer_select:
 				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			}
 		} else if (peer->config.weight == 1000 && !looped) {
+			// Enable satellite mode when we detect a weight-1000 peer
+			// This causes weight-0 peers to skip PID filtering
+			if (!is_satellite_mode()) {
+				enable_satellite_mode();
+			}
 			// Special behavior for weight-1000 recovery agents
 			// Only send if there are peers in the full stream recovery list
 			if (has_fsr_requests()) {
@@ -1098,6 +1124,11 @@ peer_select:
 				send_filtered_data_to_peer(peer, buffer, buffer->type, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			}
 		} else if (peer->config.weight == 1000 && !looped) {
+			// Enable satellite mode when we detect a weight-1000 peer
+			// This causes weight-0 peers to skip PID filtering
+			if (!is_satellite_mode()) {
+				enable_satellite_mode();
+			}
 			// Special behavior for weight-1000 recovery agents
 			// Only send if there are peers in the full stream recovery list
 			if (has_fsr_requests()) {
@@ -1294,7 +1325,18 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	uint16_t src_port = buffer->src_port;
 	if (src_port == 0)
 		src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-	ret = rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
+
+	// Apply PID filtering for NACK retransmissions if peer has program selection
+	// This ensures recovery data is also filtered per contentSelection
+	struct rist_peer *target_peer = retry->peer->peer_data;
+	bool skip_filtering = (is_satellite_mode() && target_peer->config.weight == 0);
+	if (!skip_filtering && program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+		// Use filtered send for retransmissions
+		send_filtered_data_to_peer(target_peer, buffer, buffer->type, buffer->source_time, src_port, (target_peer->config.virt_dst_port & ~1UL), buffer->seq_rtp);
+		ret = buffer->size; // Assume success for stats
+	} else {
+		ret = rist_send_seq_rtcp(target_peer, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (target_peer->config.virt_dst_port & ~1UL), true);
+	}
 	// update bandwidth value
 	rist_calculate_bitrate(ret, retry_bw);
 
