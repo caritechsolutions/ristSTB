@@ -31,15 +31,23 @@ The system uses peer weights to control data flow and PID selection behavior:
 
 | Weight | Role | Data Behavior | PID Selection |
 |--------|------|---------------|---------------|
-| **0** | Satellite path | Always sends full stream | **IGNORED** - full stream always |
+| **0** | Satellite path | Always sends full stream | **IGNORED** (only when weight-1000 peer exists) |
 | **1-999** | Load balanced | Standard weighted round-robin | Applied if peer has contentSelection |
 | **1000** | Recovery agent | Only sends when FSR is requested | **APPLIED** - filters per contentSelection |
 
 ### Key Behaviors
 
+**Satellite Mode (activated when weight-1000 peer exists):**
+- Weight-0 peers send full stream (no PID filtering)
+- Weight-1000 peers apply PID filtering per contentSelection
+
+**Simple Test Mode (no weight-1000 peer):**
+- All peers apply PID filtering if they have contentSelection
+- Weight-0 behavior is the same as other weights
+
 **Weight 0 (Satellite):**
 - Always sends data (mirroring mode)
-- **Ignores PID selection** - always sends full transport stream
+- **Ignores PID selection** only when a weight-1000 peer exists in the system
 - Used for primary satellite distribution path
 
 **Weight 1000 (Recovery Agent):**
@@ -47,6 +55,7 @@ The system uses peer weights to control data flow and PID selection behavior:
 - **Obeys PID selection** - applies filtering per receiver's contentSelection
 - NACKs are prioritized to weight-1000 peers
 - Used for terrestrial backup/recovery path
+- Triggers "satellite mode" which tells weight-0 peers to skip filtering
 
 ---
 
@@ -256,7 +265,7 @@ gcc -o rist_watchdog rist_watchdog.c
 |---------|----------|----------|
 | NACK Routing | Lowest RTT | Prioritize weight-1000 peers |
 | Data Sending | Weight-based load balancing | Weight-1000 only when FSR requested |
-| PID Selection | N/A | Weight-0 ignores, weight-1000 applies |
+| PID Selection | N/A | In satellite mode: weight-0 ignores, weight-1000 applies |
 
 ---
 
