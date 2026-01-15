@@ -909,15 +909,17 @@ int filter_transport_stream_pids(uint8_t *ts_data, size_t ts_len,
 
         /* Check if this PID should be included */
         if (!should_include_pid(pid, selection)) {
-            /* Convert to NULL packet (PID 0x1FFF) */
-            packet[1] = (packet[1] & 0xE0) | 0x1F;  /* Set PID high bits */
-            packet[2] = 0xFF;                       /* Set PID low bits */
+            /* Convert to standard NULL packet (PID 0x1FFF)
+             * The NULL packet format must match what suppress_null_packets() expects:
+             * - Byte 1: TEI=0, PUSI=0, TP=0, PID_high=0x1F -> 0x1F
+             * - Byte 2: PID_low=0xFF -> 0xFF
+             * suppress_null_packets() checks if be16toh(flags1) == 0x1FFF exactly,
+             * so we must clear TEI/PUSI/TP bits, not just set the PID bits. */
+            packet[1] = 0x1F;  /* TEI=0, PUSI=0, TP=0, PID high 5 bits = 0x1F */
+            packet[2] = 0xFF;  /* PID low 8 bits = 0xFF -> PID = 0x1FFF */
+            packet[3] = 0x10;  /* Scrambling=0, AFC=payload only(01), CC=0 */
 
-            /* Clear transport_error_indicator and set adaptation_field_control */
-            packet[1] &= 0x7F;  /* Clear transport_error_indicator */
-            packet[3] = (packet[3] & 0x0F) | 0x10;  /* Set AFC to payload only */
-
-            /* Fill payload with 0xFF (NULL packet pattern) */
+            /* Fill payload with 0xFF (standard NULL packet pattern) */
             memset(&packet[4], 0xFF, 184);
         }
     }
