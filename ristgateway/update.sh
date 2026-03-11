@@ -100,9 +100,34 @@ elif [ -f /usr/local/bin/rist22rist ]; then
     echo "rist22rist updated at /usr/local/bin/rist22rist"
 fi
 
+# Update Web API
+echo ""
+echo "Updating Gateway Web API..."
+
+VENV_DIR="$INSTALL_DIR/venv"
+
+# Update Python dependencies if requirements changed
+if [ -f "$INSTALL_DIR/ristSTB/ristgateway/requirements.txt" ]; then
+    source "$VENV_DIR/bin/activate"
+    pip install -r "$INSTALL_DIR/ristSTB/ristgateway/requirements.txt" --quiet
+    deactivate
+fi
+
+# Update web files
+cp -r "$INSTALL_DIR/ristSTB/ristgateway/web" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
+
+# Restart API service
+if systemctl is-active --quiet ristgateway-api.service; then
+    echo "Restarting Web API..."
+    systemctl restart ristgateway-api.service
+fi
+
 echo ""
 echo "========================================"
 echo "Update complete!"
 echo "========================================"
 echo "Updated from $CURRENT_COMMIT to $NEW_COMMIT"
+echo ""
+echo "Web Interface: http://$(hostname -I | awk '{print $1}'):5001"
 echo ""

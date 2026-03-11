@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RIST Gateway Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --border-color: #2a2a3a;
+            --card-radius: 16px;
+            --transition-speed: 0.2s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* Grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .logo-text span {
+            color: var(--accent-blue);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .btn-icon {
+            padding: 10px;
+            width: 40px;
+            height: 40px;
+            justify-content: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.blue { color: var(--accent-blue); }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all var(--transition-speed);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-box::before {
+            content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23a0a0b0' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        /* Gateway Grid */
+        .gateway-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Gateway Card */
+        .gateway-card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            transition: all var(--transition-speed);
+        }
+
+        .gateway-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .gateway-header {
+            padding: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .gateway-info {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .gateway-checkbox {
+            margin-top: 4px;
+        }
+
+        .gateway-checkbox input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--accent-blue);
+        }
+
+        .gateway-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .gateway-id {
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.running {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .status-badge.stopped {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .status-badge.running .status-dot {
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Peer Lists */
+        .gateway-body {
+            padding: 1.25rem;
+        }
+
+        .peer-section {
+            margin-bottom: 1rem;
+        }
+
+        .peer-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .peer-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .peer-label .icon {
+            font-size: 14px;
+        }
+
+        .peer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .peer-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: monospace;
+        }
+
+        .peer-status {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-green);
+        }
+
+        .peer-status.disabled {
+            background: var(--text-secondary);
+        }
+
+        .peer-name {
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            margin-left: auto;
+            font-size: 11px;
+        }
+
+        /* Settings Pills */
+        .settings-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .pill {
+            padding: 4px 10px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .pill.active {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-blue);
+        }
+
+        /* Gateway Actions */
+        .gateway-actions {
+            display: flex;
+            gap: 8px;
+            padding: 1rem 1.25rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .gateway-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 10px;
+        }
+
+        /* Bulk Actions Bar */
+        .bulk-actions {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: none;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+
+        .bulk-actions.visible {
+            display: flex;
+        }
+
+        .bulk-count {
+            font-weight: 500;
+            color: var(--accent-blue);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        .modal-body {
+            padding: 1.25rem;
+        }
+
+        .modal-footer {
+            padding: 1.25rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Logs Panel */
+        .logs-panel {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-line {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .log-line:last-child {
+            border-bottom: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            .gateway-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">R</div>
+                <div class="logo-text">RIST <span>Gateway</span></div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="window.location.href='/edit'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    New Gateway
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="refreshGateways()" title="Refresh">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="logout()" title="Logout">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Total Gateways</div>
+                <div class="stat-value blue" id="stat-total">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Running</div>
+                <div class="stat-value green" id="stat-running">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Stopped</div>
+                <div class="stat-value red" id="stat-stopped">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Peers</div>
+                <div class="stat-value" id="stat-peers">0</div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search gateways..." oninput="handleSearch()">
+            </div>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+                <button class="filter-btn" data-filter="running" onclick="setFilter('running')">Running</button>
+                <button class="filter-btn" data-filter="stopped" onclick="setFilter('stopped')">Stopped</button>
+            </div>
+        </div>
+
+        <div class="gateway-grid" id="gateway-grid">
+            <!-- Gateway cards will be inserted here -->
+        </div>
+
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <div class="empty-icon">&#128268;</div>
+            <div class="empty-title">No Gateways</div>
+            <p>Create your first RIST gateway to get started</p>
+            <button class="btn btn-primary" style="margin-top: 1rem;" onclick="window.location.href='/edit'">
+                Create Gateway
+            </button>
+        </div>
+    </main>
+
+    <div class="bulk-actions" id="bulk-actions">
+        <span class="bulk-count"><span id="selected-count">0</span> selected</span>
+        <button class="btn btn-success" onclick="bulkOperation('start')">Start All</button>
+        <button class="btn btn-danger" onclick="bulkOperation('stop')">Stop All</button>
+        <button class="btn btn-secondary" onclick="bulkOperation('restart')">Restart All</button>
+        <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal-overlay" id="logs-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Gateway Logs</span>
+                <button class="modal-close" onclick="closeLogsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="logs-panel" id="logs-content">
+                    Loading logs...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLogsModal()">Close</button>
+                <button class="btn btn-primary" onclick="refreshLogs()">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Delete Gateway</span>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="delete-gateway-name"></strong>?</p>
+                <p style="color: var(--text-secondary); margin-top: 8px;">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        let gateways = {};
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let selectedGateways = new Set();
+        let searchDebounceTimer = null;
+        let pollInterval = null;
+        let currentLogsGateway = null;
+        let deleteGatewayId = null;
+
+        // Check authentication
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/status`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            window.location.href = '/login';
+        }
+
+        // Load gateways
+        async function loadGateways() {
+            try {
+                const response = await fetch(`${API_BASE}/gateways`, {
+                    credentials: 'include',
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+                gateways = data.gateways || {};
+                renderGateways();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load gateways:', error);
+            }
+        }
+
+        // Render gateways
+        function renderGateways() {
+            const grid = document.getElementById('gateway-grid');
+            const emptyState = document.getElementById('empty-state');
+
+            const filtered = getFilteredGateways();
+
+            if (Object.keys(gateways).length === 0) {
+                grid.innerHTML = '';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <p>No gateways match your search</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = filtered.map(([id, gw]) => renderGatewayCard(id, gw)).join('');
+        }
+
+        // Render single gateway card
+        function renderGatewayCard(id, gw) {
+            const isRunning = gw.running;
+            const statusClass = isRunning ? 'running' : 'stopped';
+            const statusText = isRunning ? 'Running' : 'Stopped';
+
+            const inputs = gw.inputs || [];
+            const outputs = gw.outputs || [];
+            const settings = gw.settings || {};
+
+            const inputsHtml = inputs.map(p => `
+                <div class="peer-item">
+                    <span class="peer-status ${p.enabled ? '' : 'disabled'}"></span>
+                    ${escapeHtml(p.url)}
+                    ${p.name ? `<span class="peer-name">${escapeHtml(p.name)}</span>` : ''}
+                </div>
+            `).join('');
+
+            const outputsHtml = outputs.map(p => `
+                <div class="peer-item">
+                    <span class="peer-status ${p.enabled ? '' : 'disabled'}"></span>
+                    ${escapeHtml(p.url)}
+                    ${p.name ? `<span class="peer-name">${escapeHtml(p.name)}</span>` : ''}
+                </div>
+            `).join('');
+
+            return `
+                <div class="gateway-card" data-id="${id}">
+                    <div class="gateway-header">
+                        <div class="gateway-info">
+                            <div class="gateway-checkbox">
+                                <input type="checkbox"
+                                    ${selectedGateways.has(id) ? 'checked' : ''}
+                                    onchange="toggleSelection('${id}')">
+                            </div>
+                            <div>
+                                <div class="gateway-title">${escapeHtml(gw.name || id)}</div>
+                                <div class="gateway-id">${id}</div>
+                            </div>
+                        </div>
+                        <div class="status-badge ${statusClass}">
+                            <span class="status-dot"></span>
+                            ${statusText}
+                        </div>
+                    </div>
+                    <div class="gateway-body">
+                        <div class="peer-section">
+                            <div class="peer-label">
+                                <span class="icon">&#8595;</span>
+                                Inputs (${inputs.length})
+                            </div>
+                            <div class="peer-list">
+                                ${inputsHtml || '<div class="peer-item" style="color: var(--text-secondary);">No inputs configured</div>'}
+                            </div>
+                        </div>
+                        <div class="peer-section">
+                            <div class="peer-label">
+                                <span class="icon">&#8593;</span>
+                                Outputs (${outputs.length})
+                            </div>
+                            <div class="peer-list">
+                                ${outputsHtml || '<div class="peer-item" style="color: var(--text-secondary);">No outputs configured</div>'}
+                            </div>
+                        </div>
+                        <div class="settings-pills">
+                            <span class="pill ${settings.npd ? 'active' : ''}">NPD ${settings.npd ? 'ON' : 'OFF'}</span>
+                            <span class="pill ${settings.ssrc_passthrough ? 'active' : ''}">SSRC Pass ${settings.ssrc_passthrough ? 'ON' : 'OFF'}</span>
+                            <span class="pill">Profile ${settings.profile || 1}</span>
+                            <span class="pill">Buffer ${settings.buffer || 1000}ms</span>
+                        </div>
+                    </div>
+                    <div class="gateway-actions">
+                        ${isRunning
+                            ? `<button class="btn btn-danger" onclick="stopGateway('${id}')">Stop</button>`
+                            : `<button class="btn btn-success" onclick="startGateway('${id}')">Start</button>`
+                        }
+                        <button class="btn btn-secondary" onclick="window.location.href='/edit/${id}'">Edit</button>
+                        <button class="btn btn-secondary btn-icon" onclick="showLogs('${id}')" title="Logs">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-secondary btn-icon" onclick="showDeleteModal('${id}', '${escapeHtml(gw.name || id)}')" title="Delete">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Filter gateways
+        function getFilteredGateways() {
+            return Object.entries(gateways).filter(([id, gw]) => {
+                // Status filter
+                if (currentFilter === 'running' && !gw.running) return false;
+                if (currentFilter === 'stopped' && gw.running) return false;
+
+                // Search filter
+                if (searchQuery) {
+                    const query = searchQuery.toLowerCase();
+                    const name = (gw.name || '').toLowerCase();
+                    const idLower = id.toLowerCase();
+                    const inputs = (gw.inputs || []).map(p => p.url + ' ' + (p.name || '')).join(' ').toLowerCase();
+                    const outputs = (gw.outputs || []).map(p => p.url + ' ' + (p.name || '')).join(' ').toLowerCase();
+
+                    if (!name.includes(query) && !idLower.includes(query) &&
+                        !inputs.includes(query) && !outputs.includes(query)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        }
+
+        // Update stats
+        function updateStats() {
+            const all = Object.values(gateways);
+            const running = all.filter(g => g.running).length;
+            const stopped = all.length - running;
+            const peers = all.reduce((sum, g) => sum + (g.inputs?.length || 0) + (g.outputs?.length || 0), 0);
+
+            document.getElementById('stat-total').textContent = all.length;
+            document.getElementById('stat-running').textContent = running;
+            document.getElementById('stat-stopped').textContent = stopped;
+            document.getElementById('stat-peers').textContent = peers;
+        }
+
+        // Search handler with debounce
+        function handleSearch() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                searchQuery = document.getElementById('search-input').value;
+                renderGateways();
+            }, 200);
+        }
+
+        // Filter handler
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            renderGateways();
+        }
+
+        // Selection handlers
+        function toggleSelection(id) {
+            if (selectedGateways.has(id)) {
+                selectedGateways.delete(id);
+            } else {
+                selectedGateways.add(id);
+            }
+            updateBulkActionsBar();
+        }
+
+        function updateBulkActionsBar() {
+            const bar = document.getElementById('bulk-actions');
+            const count = document.getElementById('selected-count');
+            count.textContent = selectedGateways.size;
+            bar.classList.toggle('visible', selectedGateways.size > 0);
+        }
+
+        function clearSelection() {
+            selectedGateways.clear();
+            updateBulkActionsBar();
+            renderGateways();
+        }
+
+        // Gateway actions
+        async function startGateway(id) {
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${id}/start`, {
+                    method: 'PUT',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    await loadGateways();
+                } else {
+                    const data = await response.json();
+                    alert('Failed to start gateway: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Start gateway error:', error);
+                alert('Failed to start gateway');
+            }
+        }
+
+        async function stopGateway(id) {
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${id}/stop`, {
+                    method: 'PUT',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    await loadGateways();
+                } else {
+                    const data = await response.json();
+                    alert('Failed to stop gateway: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Stop gateway error:', error);
+                alert('Failed to stop gateway');
+            }
+        }
+
+        async function bulkOperation(operation) {
+            if (selectedGateways.size === 0) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/gateways/bulk`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operation: operation,
+                        gateway_ids: Array.from(selectedGateways)
+                    })
+                });
+
+                if (response.ok) {
+                    clearSelection();
+                    await loadGateways();
+                } else {
+                    alert('Bulk operation failed');
+                }
+            } catch (error) {
+                console.error('Bulk operation error:', error);
+                alert('Bulk operation failed');
+            }
+        }
+
+        // Logs modal
+        async function showLogs(id) {
+            currentLogsGateway = id;
+            document.getElementById('logs-modal').classList.add('visible');
+            await refreshLogs();
+        }
+
+        async function refreshLogs() {
+            if (!currentLogsGateway) return;
+
+            const content = document.getElementById('logs-content');
+            content.innerHTML = 'Loading...';
+
+            try {
+                const response = await fetch(`${API_BASE}/system/logs/${currentLogsGateway}?lines=100`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                if (data.logs && data.logs.length > 0) {
+                    content.innerHTML = data.logs.map(line =>
+                        `<div class="log-line">${escapeHtml(line)}</div>`
+                    ).join('');
+                    content.scrollTop = content.scrollHeight;
+                } else {
+                    content.innerHTML = '<div class="log-line">No logs available</div>';
+                }
+            } catch (error) {
+                content.innerHTML = '<div class="log-line">Failed to load logs</div>';
+            }
+        }
+
+        function closeLogsModal() {
+            document.getElementById('logs-modal').classList.remove('visible');
+            currentLogsGateway = null;
+        }
+
+        // Delete modal
+        function showDeleteModal(id, name) {
+            deleteGatewayId = id;
+            document.getElementById('delete-gateway-name').textContent = name;
+            document.getElementById('delete-modal').classList.add('visible');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('visible');
+            deleteGatewayId = null;
+        }
+
+        async function confirmDelete() {
+            if (!deleteGatewayId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${deleteGatewayId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    closeDeleteModal();
+                    await loadGateways();
+                } else {
+                    const data = await response.json();
+                    alert('Failed to delete gateway: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Delete gateway error:', error);
+                alert('Failed to delete gateway');
+            }
+        }
+
+        // Refresh
+        function refreshGateways() {
+            loadGateways();
+        }
+
+        // Polling
+        function startPolling(interval = 5000) {
+            stopPolling();
+            pollInterval = setInterval(loadGateways, interval);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            await loadGateways();
+            startPolling();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopPolling);
+
+        // Close modals on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeLogsModal();
+                closeDeleteModal();
+            }
+        });
+    </script>
+</body>
+</html>

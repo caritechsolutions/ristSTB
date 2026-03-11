@@ -1,0 +1,42 @@
+# RIST Gateway Configuration
+# Manages rist22rist instances with multi-peer bonding
+
+gateways:
+  gateway1:
+    name: "Primary Gateway"
+    enabled: true
+    status: "stopped"
+    process_id: null
+    last_error: null
+    metrics_port: 9301
+
+    # Input peers - receive from multiple sources (bonding/failover)
+    inputs:
+      - url: "rist://64.119.195.41:59800"
+        name: "Circuit A"
+        enabled: true
+      - url: "rist://104.200.103.174:60700"
+        name: "Circuit B"
+        enabled: true
+
+    # Output peers - send to multiple destinations (redundancy)
+    outputs:
+      - url: "rist://@108.181.88.213:4600"
+        name: "STB Primary"
+        enabled: true
+
+    # RIST settings
+    settings:
+      profile: 1  # 0=simple, 1=main, 2=advanced
+      buffer: 1000
+      encryption_type: null  # null, 128, 256
+      secret: null
+      npd: true  # Null Packet Deletion
+      ssrc_passthrough: true  # Preserve source SSRC
+      stats_interval: 1000  # ms
+
+# System settings
+system:
+  log_level: 6  # syslog levels
+  data_dir: "/var/lib/ristgateway"
+  pid_dir: "/var/run/ristgateway"

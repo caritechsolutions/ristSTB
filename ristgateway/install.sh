@@ -55,7 +55,10 @@ case $OS in
             libmbedtls-dev \
             libcjson-dev \
             libmicrohttpd-dev \
-            pkg-config
+            pkg-config \
+            python3 \
+            python3-pip \
+            python3-venv
         ;;
     centos|rhel|rocky|almalinux)
         dnf install -y epel-release || yum install -y epel-release
@@ -68,7 +71,9 @@ case $OS in
             mbedtls-devel \
             cjson-devel \
             libmicrohttpd-devel \
-            pkgconfig
+            pkgconfig \
+            python3 \
+            python3-pip
         ;;
     fedora)
         dnf install -y \
@@ -80,11 +85,13 @@ case $OS in
             mbedtls-devel \
             cjson-devel \
             libmicrohttpd-devel \
-            pkgconfig
+            pkgconfig \
+            python3 \
+            python3-pip
         ;;
     *)
         echo "Unsupported OS: $OS"
-        echo "Please install manually: git, meson, ninja, mbedtls-dev, cjson-dev"
+        echo "Please install manually: git, meson, ninja, mbedtls-dev, cjson-dev, python3"
         exit 1
         ;;
 esac
@@ -152,18 +159,76 @@ else
     fi
 fi
 
+# Install Web API
+echo ""
+echo "Installing Gateway Web API..."
+
+# Create directories
+mkdir -p /etc/ristgateway
+mkdir -p /var/log/ristgateway
+mkdir -p /var/run/ristgateway
+
+# Create Python virtual environment
+VENV_DIR="$INSTALL_DIR/venv"
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv "$VENV_DIR"
+fi
+
+# Install Python dependencies
+source "$VENV_DIR/bin/activate"
+pip install --upgrade pip
+pip install -r "$INSTALL_DIR/ristSTB/ristgateway/requirements.txt"
+deactivate
+
+# Copy web files
+cp -r "$INSTALL_DIR/ristSTB/ristgateway/web" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_config.yaml" /etc/ristgateway/ 2>/dev/null || true
+
+# Create systemd service for API
+cat > /etc/systemd/system/ristgateway-api.service << 'EOF'
+[Unit]
+Description=RIST Gateway Web API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ristgateway
+Environment="GATEWAY_CONFIG=/etc/ristgateway/gateway_config.yaml"
+ExecStart=/opt/ristgateway/venv/bin/python /opt/ristgateway/gateway_api.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ristgateway-api
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd and enable service
+systemctl daemon-reload
+systemctl enable ristgateway-api.service
+systemctl start ristgateway-api.service
+
 echo ""
 echo "========================================"
 echo "Installation complete!"
 echo "========================================"
 echo ""
-echo "Installed tools:"
+echo "Installed components:"
 echo "  - rist22rist  (RIST gateway with multi-peer, NPD, SSRC passthrough)"
 echo "  - rist2rist   (original simple RIST relay)"
 echo "  - ristsender  (RIST sender)"
 echo "  - ristreceiver (RIST receiver)"
+echo "  - Web API     (http://localhost:5001)"
 echo ""
-echo "Example usage:"
+echo "Web Interface:"
+echo "  URL: http://$(hostname -I | awk '{print $1}'):5001"
+echo "  Default password: admin"
+echo ""
+echo "Example CLI usage:"
 echo "  rist22rist -i 'rist://@:5000' -i 'rist://@:5001' \\"
 echo "             -o 'rist://server1:6000' -o 'rist://server2:6001' \\"
 echo "             -n -P"
