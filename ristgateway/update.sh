@@ -17,6 +17,8 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+echo "Branch: $BRANCH"
+
 # Check if installation exists
 if [ ! -d "$INSTALL_DIR/ristSTB" ]; then
     echo "Error: Installation not found at $INSTALL_DIR"

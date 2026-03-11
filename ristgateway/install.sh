@@ -5,8 +5,17 @@
 set -e
 
 INSTALL_DIR="/opt/ristgateway"
-REPO_URL="https://github.com/caritechsolutions/ristSTB.git"
 BRANCH="${RIST_BRANCH:-claude/pid-selection-oob-lkWRy}"  # Override with RIST_BRANCH env var
+
+# Repository URL - supports SSH, HTTPS with token, or plain HTTPS
+# Set GITHUB_TOKEN env var for private repo access, or use SSH
+if [ -n "$GITHUB_TOKEN" ]; then
+    REPO_URL="https://${GITHUB_TOKEN}@github.com/caritechsolutions/ristSTB.git"
+elif [ -n "$USE_SSH" ] || [ -f ~/.ssh/id_ed25519 ] || [ -f ~/.ssh/id_rsa ]; then
+    REPO_URL="git@github.com:caritechsolutions/ristSTB.git"
+else
+    REPO_URL="https://github.com/caritechsolutions/ristSTB.git"
+fi
 
 echo "========================================"
 echo "RIST Gateway Installation"
@@ -17,6 +26,9 @@ if [ "$EUID" -ne 0 ]; then
     echo "Please run as root (sudo ./install.sh)"
     exit 1
 fi
+
+echo "Repository: $REPO_URL"
+echo "Branch: $BRANCH"
 
 # Detect OS
 if [ -f /etc/os-release ]; then
