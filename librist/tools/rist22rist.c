@@ -318,7 +318,7 @@ int main(int argc, char **argv) {
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	char *remote_log_address = NULL;
 	int exitcode = 0;
-	enum rist_profile profile = RIST_PROFILE_SIMPLE;
+	enum rist_profile profile = RIST_PROFILE_MAIN;
 
 #ifdef _WIN32
 #define STDERR_FILENO 2
