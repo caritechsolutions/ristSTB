@@ -5,7 +5,7 @@
 set -e
 
 INSTALL_DIR="/opt/ristgateway"
-BRANCH="main"
+BRANCH="${RIST_BRANCH:-claude/pid-selection-oob-lkWRy}"  # Override with RIST_BRANCH env var
 
 echo "========================================"
 echo "RIST Gateway Update"

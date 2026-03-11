@@ -6,7 +6,7 @@ set -e
 
 INSTALL_DIR="/opt/ristgateway"
 REPO_URL="https://github.com/caritechsolutions/ristSTB.git"
-BRANCH="main"
+BRANCH="${RIST_BRANCH:-claude/pid-selection-oob-lkWRy}"  # Override with RIST_BRANCH env var
 
 echo "========================================"
 echo "RIST Gateway Installation"
