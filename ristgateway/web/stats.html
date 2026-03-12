@@ -989,7 +989,7 @@
                 loadGateway();
                 loadStats();
                 loadHistory();
-            }, 1000);
+            }, 2000);  // Poll every 2 seconds to reduce API load
         }
 
         function stopPolling() {

@@ -1052,21 +1052,23 @@ async def change_password(request: PasswordChange):
 # =============================================================================
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
-def list_gateways():
+async def list_gateways():
     """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     result = {}
     for gw_id, gw in gateways.items():
-        status = get_gateway_status(gw_id)
+        # Use cached stats for running status (avoids blocking subprocess calls)
+        stats = get_gateway_stats(gw_id)
+        is_running = stats.get('running', False)
         result[gw_id] = {
             **gw,
             'id': gw_id,
-            'status': status['status'],
-            'running': status['running'],
-            'pid': status['pid'],
-            'uptime': status['uptime'],
+            'status': 'running' if is_running else 'stopped',
+            'running': is_running,
+            'pid': None,
+            'uptime': None,
             'input_count': len(gw.get('inputs', [])),
             'output_count': len(gw.get('outputs', []))
         }
@@ -1074,7 +1076,7 @@ def list_gateways():
     return {"gateways": result}
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-def get_gateway(gateway_id: str):
+async def get_gateway(gateway_id: str):
     """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1083,15 +1085,19 @@ def get_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     gw = gateways[gateway_id]
-    status = get_gateway_status(gateway_id)
+
+    # Use cached stats for running status (updated by background poller)
+    # This avoids blocking subprocess calls on every request
+    stats = get_gateway_stats(gateway_id)
+    is_running = stats.get('running', False)
 
     return {
         **gw,
         'id': gateway_id,
-        'status': status['status'],
-        'running': status['running'],
-        'pid': status['pid'],
-        'uptime': status['uptime']
+        'status': 'running' if is_running else 'stopped',
+        'running': is_running,
+        'pid': None,  # Available from full status check if needed
+        'uptime': None
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
