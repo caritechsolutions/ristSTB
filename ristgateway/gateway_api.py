@@ -874,22 +874,17 @@ def _check_cgroup(gateway_id: str) -> dict:
     return status
 
 
-def _run_journalctl(service_name: str) -> str:
-    """Read journal stats via os.system() to avoid asyncio SIGCHLD conflict.
-
-    subprocess.Popen hangs inside uvicorn because asyncio's child watcher
-    reaps child processes via SIGCHLD before Popen.communicate()'s waitpid()
-    can collect them. os.system() uses C library system() which blocks
-    SIGCHLD before fork, avoiding this conflict.
-    """
+def _read_stats_file(service_name: str) -> str:
+    """Read pre-collected stats from file. Stats are written by stats_collector.sh
+    running as a separate service - no subprocess calls needed in the API."""
     try:
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', service_name)
-        tmp_file = f"/tmp/{safe_name}-stats.tmp"
-        os.system(f"timeout 3 journalctl -u {safe_name} -n 20 --no-pager -o cat > {tmp_file} 2>/dev/null")
-        with open(tmp_file) as f:
-            return f.read()
+        stats_file = f"/tmp/ristgateway-stats/{safe_name}.txt"
+        if os.path.exists(stats_file):
+            with open(stats_file) as f:
+                return f.read()
     except Exception as e:
-        logger.debug(f"journalctl failed: {e}")
+        logger.debug(f"Failed to read stats file: {e}")
     return ''
 
 
@@ -1487,7 +1482,7 @@ def get_gateway_metrics(gateway_id: str):
     is_running = status['running']
 
     if is_running:
-        journal_out = _run_journalctl(service_name)
+        journal_out = _read_stats_file(service_name)
         if journal_out:
             stats = parse_rist_json_stats(journal_out)
             if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:

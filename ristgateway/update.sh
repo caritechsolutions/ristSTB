@@ -173,6 +173,28 @@ fi
 # Update web files
 cp -r "$INSTALL_DIR/ristSTB/ristgateway/web" "$INSTALL_DIR/"
 cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/stats_collector.sh" "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/stats_collector.sh"
+
+# Create stats collector service if not exists
+if [ ! -f /etc/systemd/system/ristgateway-stats.service ]; then
+    cat > /etc/systemd/system/ristgateway-stats.service << 'SVCEOF'
+[Unit]
+Description=RIST Gateway Stats Collector
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ristgateway/stats_collector.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+    systemctl daemon-reload
+    systemctl enable ristgateway-stats.service
+fi
 
 # NOTE: We do NOT copy gateway_config.yaml to preserve existing configuration
 echo "[OK] Configuration preserved at /etc/ristgateway/gateway_config.yaml"
@@ -183,6 +205,10 @@ echo "Starting services..."
 
 # Reload systemd to pick up any service file changes
 systemctl daemon-reload
+
+# Start stats collector
+echo "Starting stats collector..."
+systemctl start ristgateway-stats.service
 
 # Start API if it was running
 if [ "$API_WAS_RUNNING" = true ]; then
