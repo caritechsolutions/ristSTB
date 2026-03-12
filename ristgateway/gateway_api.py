@@ -995,13 +995,13 @@ async def lifespan(app: FastAPI):
     # Initialize status cache for all gateways (check actual status once on startup)
     initialize_gateway_status_cache()
 
-    # Start background stats poller
-    start_stats_poller()
+    # Stats poller DISABLED for debugging - uncomment when ready
+    # start_stats_poller()
 
     yield
 
-    # Stop background stats poller
-    stop_stats_poller()
+    # Stats poller DISABLED for debugging
+    # stop_stats_poller()
     logger.info("RIST Gateway API shutting down...")
 
 app = FastAPI(
@@ -1081,22 +1081,22 @@ async def change_password(request: PasswordChange):
 # =============================================================================
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
-async def list_gateways():
+def list_gateways():
     """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     result = {}
     for gw_id, gw in gateways.items():
-        # Use cached status (updated by background poller)
-        cached = get_cached_status(gw_id)
+        # Direct status check (runs in thread pool since this is def not async def)
+        status = get_gateway_status(gw_id)
         result[gw_id] = {
             **gw,
             'id': gw_id,
-            'status': cached['status'],
-            'running': cached['running'],
-            'pid': cached.get('pid'),
-            'uptime': cached.get('uptime'),
+            'status': status['status'],
+            'running': status['running'],
+            'pid': status.get('pid'),
+            'uptime': status.get('uptime'),
             'input_count': len(gw.get('inputs', [])),
             'output_count': len(gw.get('outputs', []))
         }
@@ -1104,7 +1104,7 @@ async def list_gateways():
     return {"gateways": result}
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-async def get_gateway(gateway_id: str):
+def get_gateway(gateway_id: str):
     """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1114,16 +1114,16 @@ async def get_gateway(gateway_id: str):
 
     gw = gateways[gateway_id]
 
-    # Use cached status (updated by background poller)
-    cached = get_cached_status(gateway_id)
+    # Direct status check (runs in thread pool since this is def not async def)
+    status = get_gateway_status(gateway_id)
 
     return {
         **gw,
         'id': gateway_id,
-        'status': cached['status'],
-        'running': cached['running'],
-        'pid': cached.get('pid'),
-        'uptime': cached.get('uptime')
+        'status': status['status'],
+        'running': status['running'],
+        'pid': status.get('pid'),
+        'uptime': status.get('uptime')
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
@@ -1450,21 +1450,21 @@ async def system_metrics():
 # =============================================================================
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
-async def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway (served from cache, updated by background poller)"""
+def get_gateway_metrics(gateway_id: str):
+    """Get current stats for a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    # Return cached stats and status (background poller keeps these updated)
+    # Direct status check (runs in thread pool)
+    status = get_gateway_status(gateway_id)
     stats = get_gateway_stats(gateway_id)
-    cached = get_cached_status(gateway_id)
 
     return {
         "gateway_id": gateway_id,
-        "running": cached['running'],
+        "running": status['running'],
         "stats": stats
     }
 
