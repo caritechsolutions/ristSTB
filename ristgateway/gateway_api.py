@@ -844,57 +844,69 @@ def run_cmd(args, timeout=5) -> str:
 def _check_cgroup(gateway_id: str) -> dict:
     """Check service status via cgroup filesystem - no subprocess, instant"""
     service_name = f"ristgateway-{gateway_id}.service"
-    status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
+    cgroup_path = f"/sys/fs/cgroup/system.slice/{service_name}"
 
-    # cgroupv2 (Ubuntu 22.04+)
-    procs_file = f"/sys/fs/cgroup/system.slice/{service_name}/cgroup.procs"
-    if not os.path.exists(procs_file):
-        # cgroupv1 fallback
-        procs_file = f"/sys/fs/cgroup/systemd/system.slice/{service_name}/tasks"
+    result = {
+        'running': False,
+        'status': 'stopped',
+        'pid': None,
+        'uptime': None,
+        'cpu_percent': None,
+        'memory_mb': None
+    }
 
-    if not os.path.exists(procs_file):
-        return status
+    # Check if cgroup directory exists (service is running)
+    if not os.path.isdir(cgroup_path):
+        return result
 
+    result['running'] = True
+    result['status'] = 'running'
+
+    # Read PIDs from cgroup
     try:
-        with open(procs_file) as f:
-            pids = [int(l.strip()) for l in f if l.strip().isdigit()]
-        if pids:
-            status['running'] = True
-            status['status'] = 'running'
-            status['pid'] = pids[0]
-            try:
-                proc = psutil.Process(pids[0])
-                start = datetime.fromtimestamp(proc.create_time())
-                status['uptime'] = str(datetime.now() - start).split('.')[0]
-            except Exception:
-                pass
-    except Exception as e:
-        logger.debug(f"cgroup check failed for {gateway_id}: {e}")
+        procs_file = os.path.join(cgroup_path, 'cgroup.procs')
+        if os.path.exists(procs_file):
+            with open(procs_file, 'r') as f:
+                pids = [int(line.strip()) for line in f if line.strip().isdigit()]
+                if pids:
+                    result['pid'] = pids[0]
+    except:
+        pass
 
-    return status
+    # Read memory usage from cgroup
+    try:
+        memory_current = os.path.join(cgroup_path, 'memory.current')
+        if os.path.exists(memory_current):
+            with open(memory_current, 'r') as f:
+                memory_bytes = int(f.read().strip())
+                result['memory_mb'] = round(memory_bytes / (1024 * 1024), 2)
+    except:
+        pass
+
+    return result
 
 
 def _read_stats_file(service_name: str) -> str:
-    """Read pre-collected stats from file. Stats are written by stats_collector.sh
-    running as a separate service - no subprocess calls needed in the API."""
+    """Read the last line from the stats file"""
+    stats_file = f"/tmp/ristgateway-stats/{service_name}.txt"
     try:
-        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', service_name)
-        stats_file = f"/tmp/ristgateway-stats/{safe_name}.txt"
         if os.path.exists(stats_file):
-            with open(stats_file) as f:
-                return f.read()
+            with open(stats_file, 'r') as f:
+                lines = f.readlines()
+                if lines:
+                    return lines[-1].strip()
     except Exception as e:
-        logger.debug(f"Failed to read stats file: {e}")
+        logger.error(f"Error reading stats file: {e}")
     return ''
 
 
-async def get_gateway_status(gateway_id: str) -> dict:
+def get_gateway_status(gateway_id: str) -> dict:
     """Get gateway service status via cgroup (no subprocess, cached with TTL)"""
     cached = _status_cache.get(gateway_id)
     if cached and (time.time() - cached['ts']) < STATUS_CACHE_TTL:
         return cached['status']
 
-    # cgroup check is synchronous but instant (filesystem read)
+    # cgroup check is synchronous and instant (filesystem read)
     status = _check_cgroup(gateway_id)
     _status_cache[gateway_id] = {'status': status, 'ts': time.time()}
     return status
@@ -990,8 +1002,8 @@ def create_session() -> str:
     }
     return token
 
-async def auth_required(request: Request):
-    """Dependency for authentication"""
+def auth_required(request: Request):
+    """Dependency for authentication - synchronous for compatibility"""
     # Check session cookie
     session_token = request.cookies.get('session_token')
     if session_token and verify_session(session_token):
@@ -1469,29 +1481,33 @@ def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get current stats - runs in thread pool, no event loop interaction"""
+    """Get metrics for a gateway from its stats file"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
-        raise HTTPException(status_code=404, detail="Gateway not found")
+        raise HTTPException(status_code=404, detail=f"Gateway '{gateway_id}' not found")
 
     service_name = f"ristgateway-{gateway_id}"
     stats = {}
+
+    # Get cgroup status
     status = _check_cgroup(gateway_id)
     is_running = status['running']
 
+    # Read stats from file
     if is_running:
-        journal_out = _read_stats_file(service_name)
-        if journal_out:
-            stats = parse_rist_json_stats(journal_out)
-            if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
-                update_gateway_stats(gateway_id, stats, True)
+        stats_data = _read_stats_file(service_name)
+        if stats_data:
+            stats = parse_rist_json_stats(stats_data)
 
     return {
         "gateway_id": gateway_id,
         "running": is_running,
-        "stats": stats
+        "stats": stats,
+        "cpu_percent": status.get('cpu_percent'),
+        "memory_mb": status.get('memory_mb'),
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.get("/api/gateways/{gateway_id}/stats/history", dependencies=[Depends(auth_required)])
