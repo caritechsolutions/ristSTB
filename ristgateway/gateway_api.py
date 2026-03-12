@@ -15,11 +15,12 @@ import hashlib
 import logging
 import subprocess
 import psutil
+import threading
+from collections import deque
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
-from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -29,22 +30,185 @@ from pydantic import BaseModel, Field
 
 # Configuration paths
 CONFIG_FILE = os.environ.get('GATEWAY_CONFIG', '/etc/ristgateway/gateway_config.yaml')
-LOG_FILE = '/var/log/ristgateway/gateway_api.log'
 SYSTEMD_DIR = '/etc/systemd/system'
 PID_DIR = '/var/run/ristgateway'
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 
 # Ensure directories exist
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 os.makedirs(PID_DIR, exist_ok=True)
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging (console only, no file logging)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('gateway_api')
-handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5)
-handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
+
+# =============================================================================
+# In-Memory Stats Storage
+# =============================================================================
+
+# Store last 60 data points per gateway (for charts)
+STATS_HISTORY_SIZE = 60
+gateway_stats: Dict[str, Dict] = {}  # Current stats per gateway
+gateway_stats_history: Dict[str, deque] = {}  # Historical stats per gateway
+stats_lock = threading.Lock()
+
+def init_gateway_stats(gateway_id: str):
+    """Initialize stats storage for a gateway"""
+    with stats_lock:
+        if gateway_id not in gateway_stats:
+            gateway_stats[gateway_id] = {
+                'quality': 0,
+                'peers': 0,
+                'bandwidth': 0,
+                'retry_bandwidth': 0,
+                'rtt': 0,
+                'packets': {
+                    'sent': 0,
+                    'received': 0,
+                    'missing': 0,
+                    'reordered': 0,
+                    'recovered': 0,
+                    'recovered_one_retry': 0,
+                    'lost': 0
+                },
+                'timing': {
+                    'min_iat': 0,
+                    'cur_iat': 0,
+                    'max_iat': 0
+                },
+                'peer_details': [],
+                'last_update': None
+            }
+        if gateway_id not in gateway_stats_history:
+            gateway_stats_history[gateway_id] = deque(maxlen=STATS_HISTORY_SIZE)
+
+def parse_prometheus_metrics(text: str) -> Dict:
+    """Parse Prometheus-format metrics from rist22rist output"""
+    metrics = {
+        'quality': 0,
+        'peers': 0,
+        'bandwidth': 0,
+        'retry_bandwidth': 0,
+        'rtt': 0,
+        'packets': {
+            'sent': 0,
+            'received': 0,
+            'missing': 0,
+            'reordered': 0,
+            'recovered': 0,
+            'recovered_one_retry': 0,
+            'lost': 0
+        },
+        'timing': {
+            'min_iat': 0,
+            'cur_iat': 0,
+            'max_iat': 0
+        },
+        'peer_details': [],
+        'timestamp': datetime.now().isoformat()
+    }
+
+    try:
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            # Parse metric line: metric_name{labels} value
+            match = re.match(r'(\w+)(?:\{([^}]*)\})?\s+([\d.eE+-]+)', line)
+            if not match:
+                continue
+
+            name, labels, value = match.groups()
+            value = float(value)
+
+            # Parse labels into dict
+            label_dict = {}
+            if labels:
+                for label in labels.split(','):
+                    if '=' in label:
+                        k, v = label.split('=', 1)
+                        label_dict[k.strip()] = v.strip('"')
+
+            # Map metrics
+            if 'quality' in name:
+                metrics['quality'] = value * 100 if value <= 1 else value
+            elif 'peers' in name:
+                metrics['peers'] = int(value)
+            elif 'bandwidth_bps' in name and 'retry' not in name:
+                metrics['bandwidth'] = value / 1_000_000  # Convert to Mbps
+            elif 'retry_bandwidth_bps' in name:
+                metrics['retry_bandwidth'] = value / 1_000_000
+            elif 'rtt' in name:
+                metrics['rtt'] = value * 1000  # Convert to ms
+            elif 'sent_packets' in name:
+                metrics['packets']['sent'] = int(value)
+            elif 'received_packets' in name:
+                metrics['packets']['received'] = int(value)
+            elif 'missing_packets' in name:
+                metrics['packets']['missing'] = int(value)
+            elif 'reordered_packets' in name:
+                metrics['packets']['reordered'] = int(value)
+            elif 'recovered_one_retry' in name:
+                metrics['packets']['recovered_one_retry'] = int(value)
+            elif 'recovered_packets' in name:
+                metrics['packets']['recovered'] = int(value)
+            elif 'lost_packets' in name:
+                metrics['packets']['lost'] = int(value)
+            elif 'min_iat' in name:
+                metrics['timing']['min_iat'] = value * 1000
+            elif 'cur_iat' in name:
+                metrics['timing']['cur_iat'] = value * 1000
+            elif 'max_iat' in name:
+                metrics['timing']['max_iat'] = value * 1000
+
+    except Exception as e:
+        logger.error(f"Error parsing Prometheus metrics: {e}")
+
+    return metrics
+
+def update_gateway_stats(gateway_id: str, metrics: Dict):
+    """Update stats for a gateway"""
+    with stats_lock:
+        init_gateway_stats(gateway_id)
+        metrics['last_update'] = datetime.now().isoformat()
+        gateway_stats[gateway_id] = metrics
+        gateway_stats_history[gateway_id].append({
+            'timestamp': metrics['timestamp'],
+            'quality': metrics['quality'],
+            'bandwidth': metrics['bandwidth'],
+            'peers': metrics['peers'],
+            'rtt': metrics['rtt']
+        })
+
+def get_gateway_stats(gateway_id: str) -> Dict:
+    """Get current stats for a gateway"""
+    with stats_lock:
+        return gateway_stats.get(gateway_id, {})
+
+def get_gateway_stats_history(gateway_id: str) -> List[Dict]:
+    """Get historical stats for a gateway"""
+    with stats_lock:
+        if gateway_id in gateway_stats_history:
+            return list(gateway_stats_history[gateway_id])
+        return []
+
+def collect_stats_from_journal(gateway_id: str):
+    """Collect latest stats from journald for a gateway"""
+    service_name = f"ristgateway-{gateway_id}"
+    try:
+        # Get recent log lines containing metrics
+        result = subprocess.run(
+            ['journalctl', '-u', service_name, '-n', '50', '--no-pager', '-o', 'cat'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout:
+            # Parse the last block of Prometheus metrics
+            metrics = parse_prometheus_metrics(result.stdout)
+            if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
+                update_gateway_stats(gateway_id, metrics)
+    except Exception as e:
+        logger.error(f"Error collecting stats for {gateway_id}: {e}")
 
 # Session storage
 sessions: Dict[str, Dict] = {}
@@ -819,19 +983,45 @@ async def system_metrics():
         }
     }
 
-@app.get("/api/system/logs/{gateway_id}", dependencies=[Depends(auth_required)])
-async def gateway_logs(gateway_id: str, lines: int = 100):
-    """Get recent logs for a gateway"""
-    service_name = f"ristgateway-{gateway_id}"
+# =============================================================================
+# Gateway Stats Endpoints
+# =============================================================================
 
-    result = subprocess.run(
-        ['journalctl', '-u', service_name, '-n', str(lines), '--no-pager', '-o', 'short-iso'],
-        capture_output=True, text=True
-    )
+@app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
+async def get_gateway_metrics(gateway_id: str):
+    """Get current stats for a gateway"""
+    config = load_config()
+    gateways = config.get('gateways', {})
+
+    if gateway_id not in gateways:
+        raise HTTPException(status_code=404, detail="Gateway not found")
+
+    # Collect latest stats from journal
+    collect_stats_from_journal(gateway_id)
+
+    stats = get_gateway_stats(gateway_id)
+    status = get_gateway_status(gateway_id)
 
     return {
         "gateway_id": gateway_id,
-        "logs": result.stdout.split('\n') if result.stdout else []
+        "running": status['running'],
+        "stats": stats
+    }
+
+@app.get("/api/gateways/{gateway_id}/stats/history", dependencies=[Depends(auth_required)])
+async def get_gateway_metrics_history(gateway_id: str):
+    """Get historical stats for graphing"""
+    config = load_config()
+    gateways = config.get('gateways', {})
+
+    if gateway_id not in gateways:
+        raise HTTPException(status_code=404, detail="Gateway not found")
+
+    history = get_gateway_stats_history(gateway_id)
+
+    return {
+        "gateway_id": gateway_id,
+        "history": history
     }
 
 # =============================================================================
@@ -862,6 +1052,14 @@ async def edit_page(gateway_id: str = None):
     if os.path.exists(edit_path):
         return FileResponse(edit_path)
     return HTMLResponse("<h1>Edit Gateway</h1><p>Edit page not found.</p>")
+
+@app.get("/stats/{gateway_id}")
+async def stats_page(gateway_id: str):
+    """Serve stats page"""
+    stats_path = os.path.join(WEB_DIR, 'stats.html')
+    if os.path.exists(stats_path):
+        return FileResponse(stats_path)
+    return HTMLResponse("<h1>Gateway Stats</h1><p>Stats page not found.</p>")
 
 # Mount static files
 if os.path.exists(WEB_DIR):

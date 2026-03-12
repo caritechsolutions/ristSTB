@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gateway Stats - RIST Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --border-color: #2a2a3a;
+            --card-radius: 16px;
+            --transition-speed: 0.2s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: all var(--transition-speed);
+        }
+
+        .back-btn:hover {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .gateway-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .gateway-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .gateway-id {
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.running {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .status-badge.stopped {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .status-badge.running .status-dot {
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Quality Banner */
+        .quality-banner {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 3rem;
+        }
+
+        .quality-circle {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .quality-circle::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            padding: 4px;
+            background: conic-gradient(var(--quality-color, var(--accent-green)) calc(var(--quality, 0) * 1%), var(--bg-secondary) 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: xor;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+        }
+
+        .quality-value {
+            font-size: 36px;
+            font-weight: 700;
+        }
+
+        .quality-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .quality-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            flex: 1;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.cyan { color: var(--accent-cyan); }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Grid Layout */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-body {
+            padding: 1.25rem;
+        }
+
+        .chart-container {
+            height: 200px;
+            position: relative;
+        }
+
+        /* Packet Stats */
+        .packet-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .packet-stat {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .packet-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .packet-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Peers Section */
+        .peers-section {
+            margin-bottom: 2rem;
+        }
+
+        .peers-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .peer-card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            padding: 1.25rem;
+        }
+
+        .peer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .peer-type {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .peer-type.input { color: var(--accent-cyan); }
+        .peer-type.output { color: var(--accent-purple); }
+
+        .peer-count {
+            background: var(--bg-secondary);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .peer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .peer-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+        }
+
+        .peer-status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .peer-status-indicator.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .peer-status-indicator.disconnected {
+            background: var(--accent-red);
+        }
+
+        .peer-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .peer-url {
+            font-family: monospace;
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .peer-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .peer-metrics {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .peer-metric {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .peer-metric-value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* Timing Stats */
+        .timing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .timing-stat {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .timing-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .timing-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Not running state */
+        .not-running {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .not-running-icon {
+            font-size: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .not-running-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        @media (max-width: 1024px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .peers-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quality-banner {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .quality-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .packet-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .timing-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <a href="/" class="back-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back
+                </a>
+                <div class="gateway-title">
+                    <div>
+                        <div class="gateway-name" id="gateway-name">Loading...</div>
+                        <div class="gateway-id" id="gateway-id"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-badge stopped" id="status-badge">
+                <span class="status-dot"></span>
+                <span id="status-text">Stopped</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <!-- Quality Banner -->
+        <div class="quality-banner" id="quality-banner">
+            <div class="quality-circle" id="quality-circle" style="--quality: 0; --quality-color: var(--accent-green);">
+                <span class="quality-value" id="quality-value">0%</span>
+                <span class="quality-label">Quality</span>
+            </div>
+            <div class="quality-stats">
+                <div class="stat-item">
+                    <div class="stat-value green" id="stat-peers">0</div>
+                    <div class="stat-label">Connected Peers</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value blue" id="stat-bandwidth">0</div>
+                    <div class="stat-label">Bandwidth (Mbps)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value cyan" id="stat-rtt">0</div>
+                    <div class="stat-label">RTT (ms)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value orange" id="stat-retry-bw">0</div>
+                    <div class="stat-label">Retry BW (Mbps)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="stats-grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Bandwidth History</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="bandwidth-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Quality History</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="quality-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Peers Section -->
+        <div class="peers-section">
+            <div class="peers-grid">
+                <div class="peer-card">
+                    <div class="peer-header">
+                        <span class="peer-type input">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 19V5M5 12l7-7 7 7"/>
+                            </svg>
+                            Input Peers
+                        </span>
+                        <span class="peer-count" id="input-count">0 peers</span>
+                    </div>
+                    <div class="peer-list" id="input-peers">
+                        <div class="peer-item" style="color: var(--text-secondary); justify-content: center;">
+                            No input peers configured
+                        </div>
+                    </div>
+                </div>
+
+                <div class="peer-card">
+                    <div class="peer-header">
+                        <span class="peer-type output">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12l7 7 7-7"/>
+                            </svg>
+                            Output Peers
+                        </span>
+                        <span class="peer-count" id="output-count">0 peers</span>
+                    </div>
+                    <div class="peer-list" id="output-peers">
+                        <div class="peer-item" style="color: var(--text-secondary); justify-content: center;">
+                            No output peers configured
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Packet & Timing Stats -->
+        <div class="stats-grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Packet Statistics</span>
+                </div>
+                <div class="card-body">
+                    <div class="packet-stats">
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-received" style="color: var(--accent-green);">0</div>
+                            <div class="packet-label">Received</div>
+                        </div>
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-recovered" style="color: var(--accent-blue);">0</div>
+                            <div class="packet-label">Recovered</div>
+                        </div>
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-lost" style="color: var(--accent-red);">0</div>
+                            <div class="packet-label">Lost</div>
+                        </div>
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-missing" style="color: var(--accent-orange);">0</div>
+                            <div class="packet-label">Missing</div>
+                        </div>
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-reordered" style="color: var(--accent-purple);">0</div>
+                            <div class="packet-label">Reordered</div>
+                        </div>
+                        <div class="packet-stat">
+                            <div class="packet-value" id="pkt-retry" style="color: var(--accent-cyan);">0</div>
+                            <div class="packet-label">1-Retry Recovery</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Inter-Arrival Time</span>
+                </div>
+                <div class="card-body">
+                    <div class="timing-grid">
+                        <div class="timing-stat">
+                            <div class="timing-value" id="iat-min" style="color: var(--accent-green);">0</div>
+                            <div class="timing-label">Min IAT (ms)</div>
+                        </div>
+                        <div class="timing-stat">
+                            <div class="timing-value" id="iat-cur" style="color: var(--accent-blue);">0</div>
+                            <div class="timing-label">Current IAT (ms)</div>
+                        </div>
+                        <div class="timing-stat">
+                            <div class="timing-value" id="iat-max" style="color: var(--accent-orange);">0</div>
+                            <div class="timing-label">Max IAT (ms)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Not Running Overlay -->
+    <div class="not-running" id="not-running" style="display: none;">
+        <div class="not-running-icon">&#9888;</div>
+        <div class="not-running-title">Gateway Not Running</div>
+        <p>Start the gateway to view live statistics</p>
+        <button class="btn btn-success" style="margin-top: 1rem;" onclick="startGateway()">
+            Start Gateway
+        </button>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        const gatewayId = window.location.pathname.split('/').pop();
+        let gateway = null;
+        let bandwidthChart = null;
+        let qualityChart = null;
+        let pollInterval = null;
+
+        // Check auth
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/status`, { credentials: 'include' });
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load gateway info
+        async function loadGateway() {
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}`, { credentials: 'include' });
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                if (!response.ok) {
+                    window.location.href = '/';
+                    return;
+                }
+                gateway = await response.json();
+                updateGatewayInfo();
+            } catch (error) {
+                console.error('Failed to load gateway:', error);
+            }
+        }
+
+        // Update gateway info display
+        function updateGatewayInfo() {
+            document.getElementById('gateway-name').textContent = gateway.name || gatewayId;
+            document.getElementById('gateway-id').textContent = gatewayId;
+
+            const badge = document.getElementById('status-badge');
+            const statusText = document.getElementById('status-text');
+
+            if (gateway.running) {
+                badge.className = 'status-badge running';
+                statusText.textContent = 'Running';
+                document.getElementById('not-running').style.display = 'none';
+                document.querySelector('.main-content').style.display = 'block';
+            } else {
+                badge.className = 'status-badge stopped';
+                statusText.textContent = 'Stopped';
+                document.getElementById('not-running').style.display = 'block';
+                document.querySelector('.main-content').style.display = 'none';
+            }
+
+            // Update peers display
+            updatePeersDisplay();
+        }
+
+        // Update peers display
+        function updatePeersDisplay() {
+            const inputs = gateway.inputs || [];
+            const outputs = gateway.outputs || [];
+
+            document.getElementById('input-count').textContent = `${inputs.length} peer${inputs.length !== 1 ? 's' : ''}`;
+            document.getElementById('output-count').textContent = `${outputs.length} peer${outputs.length !== 1 ? 's' : ''}`;
+
+            const inputList = document.getElementById('input-peers');
+            const outputList = document.getElementById('output-peers');
+
+            if (inputs.length > 0) {
+                inputList.innerHTML = inputs.map(p => renderPeerItem(p, gateway.running)).join('');
+            } else {
+                inputList.innerHTML = '<div class="peer-item" style="color: var(--text-secondary); justify-content: center;">No input peers configured</div>';
+            }
+
+            if (outputs.length > 0) {
+                outputList.innerHTML = outputs.map(p => renderPeerItem(p, gateway.running)).join('');
+            } else {
+                outputList.innerHTML = '<div class="peer-item" style="color: var(--text-secondary); justify-content: center;">No output peers configured</div>';
+            }
+        }
+
+        function renderPeerItem(peer, isRunning) {
+            const connected = isRunning && peer.enabled;
+            return `
+                <div class="peer-item">
+                    <div class="peer-status-indicator ${connected ? 'connected' : 'disconnected'}"></div>
+                    <div class="peer-info">
+                        <div class="peer-url">${escapeHtml(peer.url)}</div>
+                        ${peer.name ? `<div class="peer-name">${escapeHtml(peer.name)}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Load and update stats
+        async function loadStats() {
+            if (!gateway || !gateway.running) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/stats`, { credentials: 'include' });
+                if (!response.ok) return;
+
+                const data = await response.json();
+                updateStatsDisplay(data.stats);
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        // Update stats display
+        function updateStatsDisplay(stats) {
+            if (!stats || Object.keys(stats).length === 0) return;
+
+            // Quality circle
+            const quality = stats.quality || 0;
+            const qualityCircle = document.getElementById('quality-circle');
+            const qualityColor = quality >= 95 ? 'var(--accent-green)' :
+                                 quality >= 80 ? 'var(--accent-blue)' :
+                                 quality >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+            qualityCircle.style.setProperty('--quality', quality);
+            qualityCircle.style.setProperty('--quality-color', qualityColor);
+            document.getElementById('quality-value').textContent = quality.toFixed(1) + '%';
+            document.getElementById('quality-value').style.color = qualityColor;
+
+            // Stats
+            document.getElementById('stat-peers').textContent = stats.peers || 0;
+            document.getElementById('stat-bandwidth').textContent = (stats.bandwidth || 0).toFixed(2);
+            document.getElementById('stat-rtt').textContent = (stats.rtt || 0).toFixed(1);
+            document.getElementById('stat-retry-bw').textContent = (stats.retry_bandwidth || 0).toFixed(2);
+
+            // Packets
+            const packets = stats.packets || {};
+            document.getElementById('pkt-received').textContent = formatNumber(packets.received || 0);
+            document.getElementById('pkt-recovered').textContent = formatNumber(packets.recovered || 0);
+            document.getElementById('pkt-lost').textContent = formatNumber(packets.lost || 0);
+            document.getElementById('pkt-missing').textContent = formatNumber(packets.missing || 0);
+            document.getElementById('pkt-reordered').textContent = formatNumber(packets.reordered || 0);
+            document.getElementById('pkt-retry').textContent = formatNumber(packets.recovered_one_retry || 0);
+
+            // Timing
+            const timing = stats.timing || {};
+            document.getElementById('iat-min').textContent = (timing.min_iat || 0).toFixed(2);
+            document.getElementById('iat-cur').textContent = (timing.cur_iat || 0).toFixed(2);
+            document.getElementById('iat-max').textContent = (timing.max_iat || 0).toFixed(2);
+        }
+
+        // Load history for charts
+        async function loadHistory() {
+            if (!gateway || !gateway.running) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/stats/history`, { credentials: 'include' });
+                if (!response.ok) return;
+
+                const data = await response.json();
+                updateCharts(data.history);
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
+        // Initialize charts
+        function initCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#a0a0b0'
+                        }
+                    }
+                },
+                elements: {
+                    point: { radius: 0 },
+                    line: { tension: 0.3 }
+                }
+            };
+
+            const bwCtx = document.getElementById('bandwidth-chart').getContext('2d');
+            bandwidthChart = new Chart(bwCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Bandwidth',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        borderWidth: 2
+                    }]
+                },
+                options: { ...chartOptions }
+            });
+
+            const qualityCtx = document.getElementById('quality-chart').getContext('2d');
+            qualityChart = new Chart(qualityCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Quality',
+                        data: [],
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: true,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        ...chartOptions.scales,
+                        y: {
+                            ...chartOptions.scales.y,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update charts with history data
+        function updateCharts(history) {
+            if (!history || history.length === 0) return;
+
+            const labels = history.map((_, i) => i);
+            const bandwidthData = history.map(h => h.bandwidth || 0);
+            const qualityData = history.map(h => h.quality || 0);
+
+            bandwidthChart.data.labels = labels;
+            bandwidthChart.data.datasets[0].data = bandwidthData;
+            bandwidthChart.update('none');
+
+            qualityChart.data.labels = labels;
+            qualityChart.data.datasets[0].data = qualityData;
+            qualityChart.update('none');
+        }
+
+        // Start gateway
+        async function startGateway() {
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/start`, {
+                    method: 'PUT',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    await loadGateway();
+                    startPolling();
+                } else {
+                    const data = await response.json();
+                    alert('Failed to start gateway: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Failed to start gateway');
+            }
+        }
+
+        // Polling
+        function startPolling() {
+            stopPolling();
+            loadStats();
+            loadHistory();
+            pollInterval = setInterval(() => {
+                loadGateway();
+                loadStats();
+                loadHistory();
+            }, 1000);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        // Utility
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            initCharts();
+            await loadGateway();
+            if (gateway && gateway.running) {
+                startPolling();
+            }
+        });
+
+        window.addEventListener('beforeunload', stopPolling);
+    </script>
+</body>
+</html>

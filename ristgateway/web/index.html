@@ -569,26 +569,6 @@
             gap: 12px;
         }
 
-        /* Logs Panel */
-        .logs-panel {
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 1rem;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .log-line {
-            padding: 4px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .log-line:last-child {
-            border-bottom: none;
-        }
-
         /* Responsive */
         @media (max-width: 768px) {
             .header {
@@ -698,25 +678,6 @@
         <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
     </div>
 
-    <!-- Logs Modal -->
-    <div class="modal-overlay" id="logs-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <span class="modal-title">Gateway Logs</span>
-                <button class="modal-close" onclick="closeLogsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="logs-panel" id="logs-content">
-                    Loading logs...
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeLogsModal()">Close</button>
-                <button class="btn btn-primary" onclick="refreshLogs()">Refresh</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Delete Confirmation Modal -->
     <div class="modal-overlay" id="delete-modal">
         <div class="modal">
@@ -743,7 +704,6 @@
         let selectedGateways = new Set();
         let searchDebounceTimer = null;
         let pollInterval = null;
-        let currentLogsGateway = null;
         let deleteGatewayId = null;
 
         // Check authentication
@@ -901,10 +861,9 @@
                             : `<button class="btn btn-success" onclick="startGateway('${id}')">Start</button>`
                         }
                         <button class="btn btn-secondary" onclick="window.location.href='/edit/${id}'">Edit</button>
-                        <button class="btn btn-secondary btn-icon" onclick="showLogs('${id}')" title="Logs">
+                        <button class="btn btn-secondary btn-icon" onclick="window.location.href='/stats/${id}'" title="Stats">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                                <path d="M18 20V10M12 20V4M6 20v-6"/>
                             </svg>
                         </button>
                         <button class="btn btn-secondary btn-icon" onclick="showDeleteModal('${id}', '${escapeHtml(gw.name || id)}')" title="Delete">
@@ -1059,43 +1018,6 @@
             }
         }
 
-        // Logs modal
-        async function showLogs(id) {
-            currentLogsGateway = id;
-            document.getElementById('logs-modal').classList.add('visible');
-            await refreshLogs();
-        }
-
-        async function refreshLogs() {
-            if (!currentLogsGateway) return;
-
-            const content = document.getElementById('logs-content');
-            content.innerHTML = 'Loading...';
-
-            try {
-                const response = await fetch(`${API_BASE}/system/logs/${currentLogsGateway}?lines=100`, {
-                    credentials: 'include'
-                });
-                const data = await response.json();
-
-                if (data.logs && data.logs.length > 0) {
-                    content.innerHTML = data.logs.map(line =>
-                        `<div class="log-line">${escapeHtml(line)}</div>`
-                    ).join('');
-                    content.scrollTop = content.scrollHeight;
-                } else {
-                    content.innerHTML = '<div class="log-line">No logs available</div>';
-                }
-            } catch (error) {
-                content.innerHTML = '<div class="log-line">Failed to load logs</div>';
-            }
-        }
-
-        function closeLogsModal() {
-            document.getElementById('logs-modal').classList.remove('visible');
-            currentLogsGateway = null;
-        }
-
         // Delete modal
         function showDeleteModal(id, name) {
             deleteGatewayId = id;
@@ -1168,7 +1090,6 @@
         // Close modals on escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closeLogsModal();
                 closeDeleteModal();
             }
         });
