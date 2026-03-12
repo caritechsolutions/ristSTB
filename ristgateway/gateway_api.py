@@ -994,13 +994,10 @@ async def lifespan(app: FastAPI):
     # Initialize status cache for all gateways (check actual status once on startup)
     initialize_gateway_status_cache()
 
-    # Start background stats poller
-    start_stats_poller()
+    # No background poller - stats collected on-demand and history built by client polling
 
     yield
 
-    # Stop stats poller
-    stop_stats_poller()
     logger.info("RIST Gateway API shutting down...")
 
 app = FastAPI(
@@ -1450,7 +1447,7 @@ async def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway"""
+    """Get current stats for a gateway - also builds history on each call"""
     config = load_config()
     gateways = config.get('gateways', {})
 
@@ -1466,7 +1463,7 @@ def get_gateway_metrics(gateway_id: str):
         # Check if running
         result = subprocess.run(
             ['systemctl', 'is-active', f'{service_name}.service'],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=3
         )
         is_running = result.stdout.strip() == 'active'
 
@@ -1474,14 +1471,17 @@ def get_gateway_metrics(gateway_id: str):
             # Get stats from journal
             result = subprocess.run(
                 ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=3
             )
             if result.returncode == 0 and result.stdout:
                 stats = parse_rist_json_stats(result.stdout)
+                # Store to history for graphs (builds up as client polls)
+                if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
+                    update_gateway_stats(gateway_id, stats, True)
     except subprocess.TimeoutExpired:
-        logger.error(f"Timeout getting stats for {gateway_id}")
+        logger.warning(f"Timeout getting stats for {gateway_id}")
     except Exception as e:
-        logger.error(f"Error getting stats for {gateway_id}: {e}")
+        logger.warning(f"Error getting stats for {gateway_id}: {e}")
 
     return {
         "gateway_id": gateway_id,
