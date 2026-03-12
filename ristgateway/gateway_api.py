@@ -1078,21 +1078,21 @@ async def change_password(request: PasswordChange):
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
 def list_gateways():
-    """List all gateways with their status"""
+    """List all gateways with their status - uses cached status to avoid subprocess calls"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     result = {}
     for gw_id, gw in gateways.items():
-        # Direct status check (runs in thread pool since this is def not async def)
-        status = get_gateway_status(gw_id)
+        # Use cached status (no subprocess calls)
+        cached = get_cached_status(gw_id)
         result[gw_id] = {
             **gw,
             'id': gw_id,
-            'status': status['status'],
-            'running': status['running'],
-            'pid': status.get('pid'),
-            'uptime': status.get('uptime'),
+            'status': cached.get('status', 'unknown'),
+            'running': cached.get('running', False),
+            'pid': cached.get('pid'),
+            'uptime': cached.get('uptime'),
             'input_count': len(gw.get('inputs', [])),
             'output_count': len(gw.get('outputs', []))
         }
@@ -1101,7 +1101,7 @@ def list_gateways():
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
 def get_gateway(gateway_id: str):
-    """Get single gateway details"""
+    """Get single gateway details - uses cached status to avoid subprocess calls"""
     config = load_config()
     gateways = config.get('gateways', {})
 
@@ -1110,16 +1110,16 @@ def get_gateway(gateway_id: str):
 
     gw = gateways[gateway_id]
 
-    # Direct status check (runs in thread pool since this is def not async def)
-    status = get_gateway_status(gateway_id)
+    # Use cached status (no subprocess calls)
+    cached = get_cached_status(gateway_id)
 
     return {
         **gw,
         'id': gateway_id,
-        'status': status['status'],
-        'running': status['running'],
-        'pid': status.get('pid'),
-        'uptime': status.get('uptime')
+        'status': cached.get('status', 'unknown'),
+        'running': cached.get('running', False),
+        'pid': cached.get('pid'),
+        'uptime': cached.get('uptime')
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
@@ -1447,7 +1447,7 @@ async def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway - also builds history on each call"""
+    """Get current stats for a gateway - also builds history and updates cache"""
     config = load_config()
     gateways = config.get('gateways', {})
 
@@ -1463,15 +1463,18 @@ def get_gateway_metrics(gateway_id: str):
         # Check if running
         result = subprocess.run(
             ['systemctl', 'is-active', f'{service_name}.service'],
-            capture_output=True, text=True, timeout=3
+            capture_output=True, text=True, timeout=2
         )
         is_running = result.stdout.strip() == 'active'
+
+        # Update cached status so other endpoints stay fresh
+        update_cached_status(gateway_id, is_running, None, None)
 
         if is_running:
             # Get stats from journal
             result = subprocess.run(
                 ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
-                capture_output=True, text=True, timeout=3
+                capture_output=True, text=True, timeout=2
             )
             if result.returncode == 0 and result.stdout:
                 stats = parse_rist_json_stats(result.stdout)
