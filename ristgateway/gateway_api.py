@@ -502,22 +502,15 @@ def parse_metrics_json(data: dict) -> Dict:
 
 
 def collect_gateway_stats(gateway_id: str, running: bool = True):
-    """Collect stats for a gateway - tries HTTP first, falls back to journal"""
+    """Collect stats for a gateway from journal (has both receiver and sender stats)"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         return
 
-    gw = gateways[gateway_id]
-    metrics_port = gw.get('metrics_port')
-
-    # Try HTTP metrics endpoint first
-    if metrics_port:
-        if collect_stats_from_metrics_http(gateway_id, metrics_port, running):
-            return
-
-    # Fallback to journal parsing
+    # Use journal parsing - it has both receiver-stats and sender-stats
+    # HTTP metrics endpoint only has sender stats (incomplete)
     collect_stats_from_journal(gateway_id, running)
 
 
