@@ -51,6 +51,8 @@ STATS_HISTORY_SIZE = 60
 gateway_stats: Dict[str, Dict] = {}  # Current stats per gateway
 gateway_stats_history: Dict[str, deque] = {}  # Historical stats per gateway
 stats_lock = threading.Lock()
+stats_poller_thread = None
+stats_poller_running = False
 
 def init_gateway_stats(gateway_id: str):
     """Initialize stats storage for a gateway"""
@@ -218,22 +220,212 @@ def get_gateway_stats_history(gateway_id: str) -> List[Dict]:
             return list(gateway_stats_history[gateway_id])
         return []
 
+def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int):
+    """Collect stats from rist22rist metrics HTTP endpoint"""
+    import urllib.request
+    import urllib.error
+
+    try:
+        url = f"http://127.0.0.1:{metrics_port}/metrics"
+        req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+
+        with urllib.request.urlopen(req, timeout=2) as response:
+            data = response.read().decode('utf-8')
+
+            # Try to parse as JSON first
+            try:
+                json_data = json.loads(data)
+                metrics = parse_metrics_json(json_data)
+            except json.JSONDecodeError:
+                # Might be Prometheus format
+                metrics = parse_rist_json_stats(data)
+
+            if metrics['peers'] > 0 or metrics['packets']['received'] > 0 or metrics['quality'] > 0:
+                update_gateway_stats(gateway_id, metrics)
+                return True
+
+    except urllib.error.URLError as e:
+        logger.debug(f"Could not connect to metrics endpoint for {gateway_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error collecting stats from HTTP for {gateway_id}: {e}")
+
+    return False
+
+
+def parse_metrics_json(data: dict) -> Dict:
+    """Parse metrics from HTTP JSON response"""
+    metrics = {
+        'quality': 0,
+        'peers': 0,
+        'bandwidth': 0,
+        'retry_bandwidth': 0,
+        'rtt': 0,
+        'packets': {
+            'sent': 0,
+            'received': 0,
+            'missing': 0,
+            'reordered': 0,
+            'recovered': 0,
+            'recovered_one_retry': 0,
+            'lost': 0
+        },
+        'timing': {
+            'min_iat': 0,
+            'cur_iat': 0,
+            'max_iat': 0
+        },
+        'peer_details': [],
+        'sender': {},
+        'timestamp': datetime.now().isoformat()
+    }
+
+    try:
+        # Handle receiver-stats
+        if 'receiver-stats' in data:
+            rx = data['receiver-stats']
+            if 'flowinstant' in rx:
+                flow = rx['flowinstant']
+                stats = flow.get('stats', {})
+
+                metrics['quality'] = stats.get('quality', 0)
+                metrics['packets']['received'] = stats.get('received', 0)
+                metrics['packets']['missing'] = stats.get('missing', 0)
+                metrics['packets']['recovered'] = stats.get('recovered_total', 0)
+                metrics['packets']['reordered'] = stats.get('reordered', 0)
+                metrics['packets']['lost'] = stats.get('lost', 0)
+                metrics['packets']['recovered_one_retry'] = stats.get('recovered_one_nack', 0)
+                metrics['bandwidth'] = stats.get('bitrate', 0) / 1_000_000
+                metrics['timing']['min_iat'] = stats.get('min_inter_packet_spacing', 0) / 1000
+                metrics['timing']['cur_iat'] = stats.get('cur_inter_packet_spacing', 0) / 1000
+                metrics['timing']['max_iat'] = stats.get('max_inter_packet_spacing', 0) / 1000
+
+                peers = flow.get('peers', [])
+                metrics['peers'] = len(peers)
+
+                if peers:
+                    total_rtt = sum(p.get('stats', {}).get('rtt', 0) for p in peers)
+                    metrics['rtt'] = total_rtt / len(peers)
+                    metrics['peer_details'] = [
+                        {
+                            'id': p.get('id'),
+                            'dead': p.get('dead', 0),
+                            'rtt': p.get('stats', {}).get('rtt', 0),
+                            'bitrate': p.get('stats', {}).get('bitrate', 0) / 1_000_000
+                        }
+                        for p in peers
+                    ]
+
+        # Handle sender-stats
+        if 'sender-stats' in data:
+            tx = data['sender-stats']
+            if 'peer' in tx:
+                peer = tx['peer']
+                stats = peer.get('stats', {})
+                metrics['sender'] = {
+                    'cname': peer.get('cname', ''),
+                    'quality': stats.get('quality', 0),
+                    'sent': stats.get('sent', 0),
+                    'retransmitted': stats.get('retransmitted', 0),
+                    'bandwidth': stats.get('bandwidth', 0) / 1_000_000,
+                    'retry_bandwidth': stats.get('retry_bandwidth', 0) / 1_000_000,
+                    'rtt': stats.get('rtt', 0)
+                }
+                metrics['retry_bandwidth'] = stats.get('retry_bandwidth', 0) / 1_000_000
+                metrics['packets']['sent'] = stats.get('sent', 0)
+
+    except Exception as e:
+        logger.error(f"Error parsing metrics JSON: {e}")
+
+    return metrics
+
+
+def collect_gateway_stats(gateway_id: str):
+    """Collect stats for a gateway - tries HTTP first, falls back to journal"""
+    config = load_config()
+    gateways = config.get('gateways', {})
+
+    if gateway_id not in gateways:
+        return
+
+    gw = gateways[gateway_id]
+    metrics_port = gw.get('metrics_port')
+
+    # Try HTTP metrics endpoint first
+    if metrics_port:
+        if collect_stats_from_metrics_http(gateway_id, metrics_port):
+            return
+
+    # Fallback to journal parsing
+    collect_stats_from_journal(gateway_id)
+
+
 def collect_stats_from_journal(gateway_id: str):
-    """Collect latest stats from journald for a gateway"""
+    """Collect latest stats from journald for a gateway (fallback)"""
     service_name = f"ristgateway-{gateway_id}"
     try:
-        # Get recent log lines containing JSON stats
         result = subprocess.run(
             ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0 and result.stdout:
-            # Parse the JSON stats from rist22rist
             metrics = parse_rist_json_stats(result.stdout)
             if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
                 update_gateway_stats(gateway_id, metrics)
     except Exception as e:
-        logger.error(f"Error collecting stats for {gateway_id}: {e}")
+        logger.error(f"Error collecting stats from journal for {gateway_id}: {e}")
+
+
+def stats_poller_loop():
+    """Background thread that polls stats for all running gateways"""
+    global stats_poller_running
+    logger.info("Stats poller started")
+
+    while stats_poller_running:
+        try:
+            config = load_config()
+            gateways = config.get('gateways', {})
+
+            for gateway_id, gw in gateways.items():
+                if not stats_poller_running:
+                    break
+
+                # Check if gateway is running
+                status = get_gateway_status(gateway_id)
+                if status['running']:
+                    collect_gateway_stats(gateway_id)
+
+            # Sleep for 1 second between poll cycles
+            for _ in range(10):  # Check every 100ms if we should stop
+                if not stats_poller_running:
+                    break
+                time.sleep(0.1)
+
+        except Exception as e:
+            logger.error(f"Error in stats poller: {e}")
+            time.sleep(1)
+
+    logger.info("Stats poller stopped")
+
+
+def start_stats_poller():
+    """Start the background stats polling thread"""
+    global stats_poller_thread, stats_poller_running
+
+    if stats_poller_thread and stats_poller_thread.is_alive():
+        return  # Already running
+
+    stats_poller_running = True
+    stats_poller_thread = threading.Thread(target=stats_poller_loop, daemon=True)
+    stats_poller_thread.start()
+    logger.info("Stats poller thread started")
+
+
+def stop_stats_poller():
+    """Stop the background stats polling thread"""
+    global stats_poller_running
+    stats_poller_running = False
+    logger.info("Stats poller thread stopping...")
+
 
 # Session storage
 sessions: Dict[str, Dict] = {}
@@ -375,6 +567,13 @@ def generate_systemd_service(gateway_id: str, gateway: dict) -> str:
 
     if settings.get('stats_interval'):
         cmd_parts.append(f"-S {settings['stats_interval']}")
+
+    # Add metrics HTTP endpoint
+    metrics_port = gateway.get('metrics_port')
+    if metrics_port:
+        cmd_parts.append('-M')
+        cmd_parts.append('--metrics-http')
+        cmd_parts.append(f'--metrics-port={metrics_port}')
 
     cmd = ' '.join(cmd_parts)
 
@@ -574,7 +773,14 @@ async def lifespan(app: FastAPI):
     # Initialize config if it doesn't exist
     if not os.path.exists(CONFIG_FILE):
         save_config({'gateways': {}, 'system': {'password_hash': hash_password('admin')}})
+
+    # Start background stats poller
+    start_stats_poller()
+
     yield
+
+    # Stop background stats poller
+    stop_stats_poller()
     logger.info("RIST Gateway API shutting down...")
 
 app = FastAPI(
@@ -1014,16 +1220,14 @@ async def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 async def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway"""
+    """Get current stats for a gateway (served from cache, updated by background poller)"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    # Collect latest stats from journal
-    collect_stats_from_journal(gateway_id)
-
+    # Return cached stats (background poller keeps these updated)
     stats = get_gateway_stats(gateway_id)
     status = get_gateway_status(gateway_id)
 
