@@ -1107,16 +1107,14 @@ async def change_password(request: PasswordChange):
 # =============================================================================
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
-async def list_gateways():
+def list_gateways():
     """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
 
-    # Fetch all gateway statuses concurrently
-    statuses = await asyncio.gather(*[get_gateway_status(gw_id) for gw_id in gateways])
-
     result = {}
-    for (gw_id, gw), status in zip(gateways.items(), statuses):
+    for gw_id, gw in gateways.items():
+        status = _check_cgroup(gw_id)
         result[gw_id] = {
             **gw,
             'id': gw_id,
@@ -1131,7 +1129,7 @@ async def list_gateways():
     return {"gateways": result}
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-async def get_gateway(gateway_id: str):
+def get_gateway(gateway_id: str):
     """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1140,7 +1138,7 @@ async def get_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     gw = gateways[gateway_id]
-    status = await get_gateway_status(gateway_id)
+    status = _check_cgroup(gateway_id)
 
     return {
         **gw,
@@ -1475,8 +1473,8 @@ def system_metrics():
 # =============================================================================
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
-async def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway and store to history for graphs"""
+def get_gateway_metrics(gateway_id: str):
+    """Get current stats - runs in thread pool, no event loop interaction"""
     config = load_config()
     gateways = config.get('gateways', {})
 
@@ -1485,19 +1483,11 @@ async def get_gateway_metrics(gateway_id: str):
 
     service_name = f"ristgateway-{gateway_id}"
     stats = {}
-
-    gw_status = await get_gateway_status(gateway_id)
-    is_running = gw_status['running']
+    status = _check_cgroup(gateway_id)
+    is_running = status['running']
 
     if is_running:
-        loop = asyncio.get_event_loop()
-        try:
-            journal_out = await asyncio.wait_for(
-                loop.run_in_executor(None, _run_journalctl, service_name),
-                timeout=5
-            )
-        except asyncio.TimeoutError:
-            journal_out = ''
+        journal_out = _run_journalctl(service_name)
         if journal_out:
             stats = parse_rist_json_stats(journal_out)
             if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
