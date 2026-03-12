@@ -1451,18 +1451,35 @@ def get_gateway_metrics(gateway_id: str):
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    # Direct status check (runs in thread pool)
-    status = get_gateway_status(gateway_id)
+    # Collect fresh stats directly from journal
+    service_name = f"ristgateway-{gateway_id}"
+    stats = {}
+    is_running = False
 
-    # Collect fresh stats on-demand if running
-    if status['running']:
-        collect_gateway_stats(gateway_id, running=True)
+    try:
+        # Check if running
+        result = subprocess.run(
+            ['systemctl', 'is-active', f'{service_name}.service'],
+            capture_output=True, text=True, timeout=5
+        )
+        is_running = result.stdout.strip() == 'active'
 
-    stats = get_gateway_stats(gateway_id)
+        if is_running:
+            # Get stats from journal
+            result = subprocess.run(
+                ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout:
+                stats = parse_rist_json_stats(result.stdout)
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout getting stats for {gateway_id}")
+    except Exception as e:
+        logger.error(f"Error getting stats for {gateway_id}: {e}")
 
     return {
         "gateway_id": gateway_id,
-        "running": status['running'],
+        "running": is_running,
         "stats": stats
     }
 
