@@ -50,6 +50,7 @@ logger = logging.getLogger('gateway_api')
 STATS_HISTORY_SIZE = 60
 gateway_stats: Dict[str, Dict] = {}  # Current stats per gateway
 gateway_stats_history: Dict[str, deque] = {}  # Historical stats per gateway
+gateway_status_cache: Dict[str, Dict] = {}  # Cached running status per gateway
 stats_lock = threading.Lock()
 stats_poller_thread = None
 stats_poller_running = False
@@ -213,6 +214,21 @@ def get_gateway_stats(gateway_id: str) -> Dict:
     """Get current stats for a gateway"""
     with stats_lock:
         return gateway_stats.get(gateway_id, {})
+
+def get_cached_status(gateway_id: str) -> Dict:
+    """Get cached running status for a gateway"""
+    with stats_lock:
+        return gateway_status_cache.get(gateway_id, {'running': False, 'status': 'unknown'})
+
+def update_cached_status(gateway_id: str, running: bool, pid: int = None, uptime: str = None):
+    """Update cached running status for a gateway"""
+    with stats_lock:
+        gateway_status_cache[gateway_id] = {
+            'running': running,
+            'status': 'running' if running else 'stopped',
+            'pid': pid,
+            'uptime': uptime
+        }
 
 def get_gateway_stats_history(gateway_id: str) -> List[Dict]:
     """Get historical stats for a gateway"""
@@ -522,13 +538,12 @@ def collect_stats_from_journal(gateway_id: str, running: bool = True):
 
 
 def stats_poller_loop():
-    """Background thread that polls stats for all running gateways"""
+    """Background thread that polls stats for all gateways"""
     global stats_poller_running
     logger.info("Stats poller started")
 
-    # Cache running status to reduce systemctl calls
-    running_cache = {}  # gateway_id -> {'running': bool, 'last_check': time}
-    STATUS_CHECK_INTERVAL = 5  # Only check systemctl every 5 seconds
+    last_status_check = 0
+    STATUS_CHECK_INTERVAL = 5  # Check systemctl every 5 seconds
 
     while stats_poller_running:
         try:
@@ -536,30 +551,28 @@ def stats_poller_loop():
             gateways = config.get('gateways', {})
             current_time = time.time()
 
+            # Check if it's time to refresh all gateway statuses
+            should_check_status = (current_time - last_status_check) >= STATUS_CHECK_INTERVAL
+
             for gateway_id, gw in gateways.items():
                 if not stats_poller_running:
                     break
 
-                # Check running status from cache or refresh if stale
-                cache_entry = running_cache.get(gateway_id)
-                if not cache_entry or (current_time - cache_entry['last_check']) > STATUS_CHECK_INTERVAL:
-                    # Time to check actual status
+                # Update status cache periodically
+                if should_check_status:
                     status = get_gateway_status(gateway_id)
-                    running_cache[gateway_id] = {
-                        'running': status['running'],
-                        'last_check': current_time
-                    }
+                    update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
                     is_running = status['running']
                 else:
-                    is_running = cache_entry['running']
+                    cached = get_cached_status(gateway_id)
+                    is_running = cached['running']
 
+                # Collect stats only for running gateways
                 if is_running:
                     collect_gateway_stats(gateway_id, running=True)
-                else:
-                    # Update stats with running=False so UI shows correct status
-                    with stats_lock:
-                        if gateway_id in gateway_stats:
-                            gateway_stats[gateway_id]['running'] = False
+
+            if should_check_status:
+                last_status_check = current_time
 
             # Sleep for 1 second between poll cycles
             for _ in range(10):  # Check every 100ms if we should stop
@@ -573,6 +586,19 @@ def stats_poller_loop():
 
     logger.info("Stats poller stopped")
 
+
+def initialize_gateway_status_cache():
+    """Initialize status cache for all gateways on startup"""
+    logger.info("Initializing gateway status cache...")
+    try:
+        config = load_config()
+        gateways = config.get('gateways', {})
+        for gateway_id in gateways:
+            status = get_gateway_status(gateway_id)
+            update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
+            logger.info(f"  {gateway_id}: {'running' if status['running'] else 'stopped'}")
+    except Exception as e:
+        logger.error(f"Error initializing status cache: {e}")
 
 def start_stats_poller():
     """Start the background stats polling thread"""
@@ -966,6 +992,9 @@ async def lifespan(app: FastAPI):
     if not os.path.exists(CONFIG_FILE):
         save_config({'gateways': {}, 'system': {'password_hash': hash_password('admin')}})
 
+    # Initialize status cache for all gateways (check actual status once on startup)
+    initialize_gateway_status_cache()
+
     # Start background stats poller
     start_stats_poller()
 
@@ -1059,16 +1088,15 @@ async def list_gateways():
 
     result = {}
     for gw_id, gw in gateways.items():
-        # Use cached stats for running status (avoids blocking subprocess calls)
-        stats = get_gateway_stats(gw_id)
-        is_running = stats.get('running', False)
+        # Use cached status (updated by background poller)
+        cached = get_cached_status(gw_id)
         result[gw_id] = {
             **gw,
             'id': gw_id,
-            'status': 'running' if is_running else 'stopped',
-            'running': is_running,
-            'pid': None,
-            'uptime': None,
+            'status': cached['status'],
+            'running': cached['running'],
+            'pid': cached.get('pid'),
+            'uptime': cached.get('uptime'),
             'input_count': len(gw.get('inputs', [])),
             'output_count': len(gw.get('outputs', []))
         }
@@ -1086,18 +1114,16 @@ async def get_gateway(gateway_id: str):
 
     gw = gateways[gateway_id]
 
-    # Use cached stats for running status (updated by background poller)
-    # This avoids blocking subprocess calls on every request
-    stats = get_gateway_stats(gateway_id)
-    is_running = stats.get('running', False)
+    # Use cached status (updated by background poller)
+    cached = get_cached_status(gateway_id)
 
     return {
         **gw,
         'id': gateway_id,
-        'status': 'running' if is_running else 'stopped',
-        'running': is_running,
-        'pid': None,  # Available from full status check if needed
-        'uptime': None
+        'status': cached['status'],
+        'running': cached['running'],
+        'pid': cached.get('pid'),
+        'uptime': cached.get('uptime')
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
@@ -1204,6 +1230,9 @@ def api_start_gateway(gateway_id: str):
         raise HTTPException(status_code=400, detail="Gateway needs at least one input and one output")
 
     if start_gateway(gateway_id, gw):
+        # Update status cache immediately
+        status = get_gateway_status(gateway_id)
+        update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
         return {"success": True, "message": f"Gateway {gateway_id} started"}
     else:
         raise HTTPException(status_code=500, detail="Failed to start gateway")
@@ -1218,6 +1247,8 @@ def api_stop_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     if stop_gateway(gateway_id):
+        # Update status cache immediately
+        update_cached_status(gateway_id, False, None, None)
         return {"success": True, "message": f"Gateway {gateway_id} stopped"}
     else:
         raise HTTPException(status_code=500, detail="Failed to stop gateway")
@@ -1234,6 +1265,9 @@ def api_restart_gateway(gateway_id: str):
     gw = gateways[gateway_id]
 
     if restart_gateway(gateway_id, gw):
+        # Update status cache immediately
+        status = get_gateway_status(gateway_id)
+        update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
         return {"success": True, "message": f"Gateway {gateway_id} restarted"}
     else:
         raise HTTPException(status_code=500, detail="Failed to restart gateway")
@@ -1424,13 +1458,13 @@ async def get_gateway_metrics(gateway_id: str):
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    # Return cached stats (background poller keeps these updated)
-    # Do NOT call get_gateway_status() here - it blocks the event loop
+    # Return cached stats and status (background poller keeps these updated)
     stats = get_gateway_stats(gateway_id)
+    cached = get_cached_status(gateway_id)
 
     return {
         "gateway_id": gateway_id,
-        "running": stats.get('running', False),
+        "running": cached['running'],
         "stats": stats
     }
 
