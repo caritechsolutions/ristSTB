@@ -82,8 +82,8 @@ def init_gateway_stats(gateway_id: str):
         if gateway_id not in gateway_stats_history:
             gateway_stats_history[gateway_id] = deque(maxlen=STATS_HISTORY_SIZE)
 
-def parse_prometheus_metrics(text: str) -> Dict:
-    """Parse Prometheus-format metrics from rist22rist output"""
+def parse_rist_json_stats(text: str) -> Dict:
+    """Parse JSON stats from rist22rist output"""
     metrics = {
         'quality': 0,
         'peers': 0,
@@ -105,65 +105,90 @@ def parse_prometheus_metrics(text: str) -> Dict:
             'max_iat': 0
         },
         'peer_details': [],
+        'sender': {},
         'timestamp': datetime.now().isoformat()
     }
 
     try:
+        # Find all JSON objects in the text
         for line in text.split('\n'):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
+            # Extract JSON from log line (format: timestamp|...|[INFO] {json})
+            if '{"receiver-stats"' in line or '{"sender-stats"' in line:
+                # Find the JSON part
+                json_start = line.find('{')
+                if json_start == -1:
+                    continue
+                json_str = line[json_start:]
 
-            # Parse metric line: metric_name{labels} value
-            match = re.match(r'(\w+)(?:\{([^}]*)\})?\s+([\d.eE+-]+)', line)
-            if not match:
-                continue
+                try:
+                    data = json.loads(json_str)
+                except json.JSONDecodeError:
+                    continue
 
-            name, labels, value = match.groups()
-            value = float(value)
+                # Parse receiver-stats
+                if 'receiver-stats' in data:
+                    rx = data['receiver-stats']
+                    if 'flowinstant' in rx:
+                        flow = rx['flowinstant']
+                        stats = flow.get('stats', {})
 
-            # Parse labels into dict
-            label_dict = {}
-            if labels:
-                for label in labels.split(','):
-                    if '=' in label:
-                        k, v = label.split('=', 1)
-                        label_dict[k.strip()] = v.strip('"')
+                        metrics['quality'] = stats.get('quality', 0)
+                        metrics['packets']['received'] = stats.get('received', 0)
+                        metrics['packets']['missing'] = stats.get('missing', 0)
+                        metrics['packets']['recovered'] = stats.get('recovered_total', 0)
+                        metrics['packets']['reordered'] = stats.get('reordered', 0)
+                        metrics['packets']['lost'] = stats.get('lost', 0)
+                        metrics['packets']['recovered_one_retry'] = stats.get('recovered_one_nack', 0)
 
-            # Map metrics
-            if 'quality' in name:
-                metrics['quality'] = value * 100 if value <= 1 else value
-            elif 'peers' in name:
-                metrics['peers'] = int(value)
-            elif 'bandwidth_bps' in name and 'retry' not in name:
-                metrics['bandwidth'] = value / 1_000_000  # Convert to Mbps
-            elif 'retry_bandwidth_bps' in name:
-                metrics['retry_bandwidth'] = value / 1_000_000
-            elif 'rtt' in name:
-                metrics['rtt'] = value * 1000  # Convert to ms
-            elif 'sent_packets' in name:
-                metrics['packets']['sent'] = int(value)
-            elif 'received_packets' in name:
-                metrics['packets']['received'] = int(value)
-            elif 'missing_packets' in name:
-                metrics['packets']['missing'] = int(value)
-            elif 'reordered_packets' in name:
-                metrics['packets']['reordered'] = int(value)
-            elif 'recovered_one_retry' in name:
-                metrics['packets']['recovered_one_retry'] = int(value)
-            elif 'recovered_packets' in name:
-                metrics['packets']['recovered'] = int(value)
-            elif 'lost_packets' in name:
-                metrics['packets']['lost'] = int(value)
-            elif 'min_iat' in name:
-                metrics['timing']['min_iat'] = value * 1000
-            elif 'cur_iat' in name:
-                metrics['timing']['cur_iat'] = value * 1000
-            elif 'max_iat' in name:
-                metrics['timing']['max_iat'] = value * 1000
+                        # Bandwidth in bps -> Mbps
+                        metrics['bandwidth'] = stats.get('bitrate', 0) / 1_000_000
+
+                        # Inter-packet timing (microseconds -> ms)
+                        metrics['timing']['min_iat'] = stats.get('min_inter_packet_spacing', 0) / 1000
+                        metrics['timing']['cur_iat'] = stats.get('cur_inter_packet_spacing', 0) / 1000
+                        metrics['timing']['max_iat'] = stats.get('max_inter_packet_spacing', 0) / 1000
+
+                        # Parse peers
+                        peers = flow.get('peers', [])
+                        metrics['peers'] = len(peers)
+
+                        # Calculate average RTT from peers
+                        if peers:
+                            total_rtt = sum(p.get('stats', {}).get('rtt', 0) for p in peers)
+                            metrics['rtt'] = total_rtt / len(peers)
+
+                            # Store peer details
+                            metrics['peer_details'] = [
+                                {
+                                    'id': p.get('id'),
+                                    'dead': p.get('dead', 0),
+                                    'rtt': p.get('stats', {}).get('rtt', 0),
+                                    'bitrate': p.get('stats', {}).get('bitrate', 0) / 1_000_000
+                                }
+                                for p in peers
+                            ]
+
+                # Parse sender-stats
+                elif 'sender-stats' in data:
+                    tx = data['sender-stats']
+                    if 'peer' in tx:
+                        peer = tx['peer']
+                        stats = peer.get('stats', {})
+
+                        metrics['sender'] = {
+                            'cname': peer.get('cname', ''),
+                            'quality': stats.get('quality', 0),
+                            'sent': stats.get('sent', 0),
+                            'retransmitted': stats.get('retransmitted', 0),
+                            'bandwidth': stats.get('bandwidth', 0) / 1_000_000,
+                            'retry_bandwidth': stats.get('retry_bandwidth', 0) / 1_000_000,
+                            'rtt': stats.get('rtt', 0)
+                        }
+                        metrics['retry_bandwidth'] = stats.get('retry_bandwidth', 0) / 1_000_000
+                        metrics['packets']['sent'] = stats.get('sent', 0)
 
     except Exception as e:
-        logger.error(f"Error parsing Prometheus metrics: {e}")
+        logger.error(f"Error parsing RIST JSON stats: {e}")
 
     return metrics
 
@@ -197,14 +222,14 @@ def collect_stats_from_journal(gateway_id: str):
     """Collect latest stats from journald for a gateway"""
     service_name = f"ristgateway-{gateway_id}"
     try:
-        # Get recent log lines containing metrics
+        # Get recent log lines containing JSON stats
         result = subprocess.run(
-            ['journalctl', '-u', service_name, '-n', '50', '--no-pager', '-o', 'cat'],
+            ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0 and result.stdout:
-            # Parse the last block of Prometheus metrics
-            metrics = parse_prometheus_metrics(result.stdout)
+            # Parse the JSON stats from rist22rist
+            metrics = parse_rist_json_stats(result.stdout)
             if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
                 update_gateway_stats(gateway_id, metrics)
     except Exception as e:
