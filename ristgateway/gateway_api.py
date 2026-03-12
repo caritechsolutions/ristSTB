@@ -568,9 +568,9 @@ def generate_systemd_service(gateway_id: str, gateway: dict) -> str:
     if settings.get('stats_interval'):
         cmd_parts.append(f"-S {settings['stats_interval']}")
 
-    # Add metrics HTTP endpoint
+    # Add metrics HTTP endpoint (requires librist compiled with HAVE_PROMETHEUS_SUPPORT)
     metrics_port = gateway.get('metrics_port')
-    if metrics_port:
+    if metrics_port and gateway.get('enable_metrics_http', True):
         cmd_parts.append('-M')
         cmd_parts.append('--metrics-http')
         cmd_parts.append(f'--metrics-port={metrics_port}')

@@ -16,6 +16,9 @@
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
 #endif
+#if HAVE_PROMETHEUS_SUPPORT
+#include "prometheus-exporter.h"
+#endif
 #include "vcs_version.h"
 #include <stdio.h>
 #include <string.h>
@@ -57,6 +60,15 @@ struct rist_cb_arg {
 static int keep_running = 1;
 static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALIZER;
 
+#if HAVE_PROMETHEUS_SUPPORT
+struct rist_prometheus_stats *prom_stats_ctx = NULL;
+bool prometheus_httpd = false;
+bool enable_prometheus = false;
+char *prometheus_tags = NULL;
+uint16_t prometheus_port = 9100;
+char *prometheus_ip = NULL;
+#endif
+
 static struct option long_options[] = {
 { "inurl",             required_argument, NULL, 'i' },
 { "outurl",            required_argument, NULL, 'o' },
@@ -71,6 +83,15 @@ static struct option long_options[] = {
 { "passthrough-ssrc",  no_argument,       NULL, 'P' },
 #if HAVE_SRP_SUPPORT
 { "srpfile",           required_argument, NULL, 'F' },
+#endif
+#if HAVE_PROMETHEUS_SUPPORT
+{ "enable-metrics",    no_argument,       NULL, 'M' },
+{ "metrics-tags",      required_argument, NULL, 1 },
+#if HAVE_LIBMICROHTTPD
+{ "metrics-http",      no_argument,       (int*)&prometheus_httpd, true },
+{ "metrics-port",      required_argument, NULL, 2 },
+{ "metrics-ip",        required_argument, NULL, 3 },
+#endif
 #endif
 { "help",              no_argument,       NULL, 'h' },
 { 0, 0, 0, 0 },
@@ -90,6 +111,15 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -P | --passthrough-ssrc                  | Pass through source SSRC (for multi-server bonding)  |\n"
 #if HAVE_SRP_SUPPORT
 "       -F | --srpfile filepath                  | SRP authentication file (use ristsrppasswd to create)|\n"
+#endif
+#if HAVE_PROMETHEUS_SUPPORT
+"       -M | --enable-metrics                    | Enable OpenMetrics/Prometheus compatible metrics     |\n"
+"          | --metrics-tags                      | Additional tags to add to the metrics                |\n"
+#if HAVE_LIBMICROHTTPD
+"          | --metrics-http                      | Start HTTP Server to expose metrics                  |\n"
+"          | --metrics-port                      | Port for metrics HTTP server (default: 9100)         |\n"
+"          | --metrics-ip                        | IP for metrics HTTP server (default: 0.0.0.0)        |\n"
+#endif
 #endif
 "       -h | --help                              | Show this help                                       |\n"
 "       -u | --help-url                          | Show all the possible url options                    |\n"
@@ -159,8 +189,13 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 }
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
+#if HAVE_PROMETHEUS_SUPPORT
+	if (prom_stats_ctx != NULL)
+		rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uintptr_t)arg);
+#else
 	(void)arg;
-	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+#endif
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n", stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }
@@ -344,7 +379,7 @@ int main(int argc, char **argv) {
 
 	int option_index;
 	int c;
-	while ((c = getopt_long(argc, argv, "r:i:o:s:e:N:v:S:p:nPh:u", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:s:e:N:v:S:p:nPMh:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			if (input_url_count >= MAX_INPUT_URLS) {
@@ -402,6 +437,28 @@ int main(int argc, char **argv) {
 		}
 		break;
 #endif
+#if HAVE_PROMETHEUS_SUPPORT
+		case 'M':
+			enable_prometheus = true;
+			break;
+		case 0:
+			// Long option with flag pointer - already handled
+			break;
+		case 1:
+			// --metrics-tags
+			prometheus_tags = strdup(optarg);
+			break;
+		case 2:
+			// --metrics-port
+			prometheus_httpd = true;
+			prometheus_port = atoi(optarg);
+			break;
+		case 3:
+			// --metrics-ip
+			prometheus_httpd = true;
+			prometheus_ip = strdup(optarg);
+			break;
+#endif
 		case 'S':
 			statsinterval = atoi(optarg);
 			break;
@@ -447,6 +504,27 @@ usage:
 	}
 	rist_log(&logging_settings, RIST_LOG_INFO, "  NPD: %s\n", client_args.npd_enabled ? "enabled" : "disabled");
 	rist_log(&logging_settings, RIST_LOG_INFO, "  SSRC passthrough: %s\n", client_args.ssrc_passthrough ? "enabled" : "disabled");
+
+#if HAVE_PROMETHEUS_SUPPORT
+	if (enable_prometheus || prometheus_httpd) {
+		rist_log(log_ptr, RIST_LOG_INFO, "Enabling Metrics output\n");
+		struct prometheus_httpd_options httpd_opt;
+		httpd_opt.enabled = prometheus_httpd;
+		httpd_opt.port = prometheus_port;
+		httpd_opt.ip = prometheus_ip;
+		httpd_opt.bind_sockaddr = false;
+		prom_stats_ctx = rist_setup_prometheus_stats(log_ptr, prometheus_tags, false, false, &httpd_opt, NULL);
+		if (prom_stats_ctx == NULL) {
+			rist_log(log_ptr, RIST_LOG_ERROR, "Failed to setup Metrics output\n");
+			exitcode = 1;
+			goto out;
+		}
+		if (prometheus_httpd) {
+			rist_log(log_ptr, RIST_LOG_INFO, "Metrics HTTP server listening on http://%s:%d/metrics\n",
+				prometheus_ip ? prometheus_ip : "0.0.0.0", prometheus_port);
+		}
+	}
+#endif
 
 	// Create receiver context
 	struct rist_ctx *receiver_ctx;
@@ -549,6 +627,12 @@ out:
 	}
 	if (remote_log_address)
 		free(remote_log_address);
+
+#if HAVE_PROMETHEUS_SUPPORT
+	rist_prometheus_stats_destroy(prom_stats_ctx);
+	free(prometheus_ip);
+	free(prometheus_tags);
+#endif
 
 	return exitcode;
 }
