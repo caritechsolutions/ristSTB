@@ -176,9 +176,8 @@ cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
 cp "$INSTALL_DIR/ristSTB/ristgateway/stats_collector.sh" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/stats_collector.sh"
 
-# Create stats collector service if not exists
-if [ ! -f /etc/systemd/system/ristgateway-stats.service ]; then
-    cat > /etc/systemd/system/ristgateway-stats.service << 'SVCEOF'
+# Create/update stats collector service
+cat > /etc/systemd/system/ristgateway-stats.service << 'SVCEOF'
 [Unit]
 Description=RIST Gateway Stats Collector
 After=network.target
@@ -192,9 +191,8 @@ RestartSec=2
 [Install]
 WantedBy=multi-user.target
 SVCEOF
-    systemctl daemon-reload
-    systemctl enable ristgateway-stats.service
-fi
+systemctl daemon-reload
+systemctl enable ristgateway-stats.service
 
 # NOTE: We do NOT copy gateway_config.yaml to preserve existing configuration
 echo "[OK] Configuration preserved at /etc/ristgateway/gateway_config.yaml"
