@@ -535,47 +535,53 @@ def stats_poller_loop():
     global stats_poller_running
     logger.info("Stats poller started")
 
-    last_status_check = 0
-    STATUS_CHECK_INTERVAL = 5  # Check systemctl every 5 seconds
-
     while stats_poller_running:
         try:
             config = load_config()
             gateways = config.get('gateways', {})
-            current_time = time.time()
-
-            # Check if it's time to refresh all gateway statuses
-            should_check_status = (current_time - last_status_check) >= STATUS_CHECK_INTERVAL
 
             for gateway_id, gw in gateways.items():
                 if not stats_poller_running:
                     break
 
-                # Update status cache periodically
-                if should_check_status:
-                    status = get_gateway_status(gateway_id)
-                    update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
-                    is_running = status['running']
-                else:
-                    cached = get_cached_status(gateway_id)
-                    is_running = cached['running']
+                service_name = f"ristgateway-{gateway_id}"
 
-                # Collect stats only for running gateways
+                # Check if running (simple, direct call)
+                try:
+                    result = subprocess.run(
+                        ['systemctl', 'is-active', f'{service_name}.service'],
+                        capture_output=True, text=True, timeout=3
+                    )
+                    is_running = result.stdout.strip() == 'active'
+                except:
+                    is_running = False
+
+                # Update status cache
+                update_cached_status(gateway_id, is_running, None, None)
+
+                # Collect stats if running
                 if is_running:
-                    collect_gateway_stats(gateway_id, running=True)
+                    try:
+                        result = subprocess.run(
+                            ['journalctl', '-u', service_name, '-n', '5', '--no-pager', '-o', 'cat'],
+                            capture_output=True, text=True, timeout=3
+                        )
+                        if result.returncode == 0 and result.stdout:
+                            metrics = parse_rist_json_stats(result.stdout)
+                            if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
+                                update_gateway_stats(gateway_id, metrics, True)
+                    except Exception as e:
+                        logger.debug(f"Error collecting stats for {gateway_id}: {e}")
 
-            if should_check_status:
-                last_status_check = current_time
-
-            # Sleep for 1 second between poll cycles
-            for _ in range(10):  # Check every 100ms if we should stop
+            # Sleep for 2 seconds between poll cycles
+            for _ in range(20):  # Check every 100ms if we should stop
                 if not stats_poller_running:
                     break
                 time.sleep(0.1)
 
         except Exception as e:
             logger.error(f"Error in stats poller: {e}")
-            time.sleep(1)
+            time.sleep(2)
 
     logger.info("Stats poller stopped")
 
@@ -988,13 +994,13 @@ async def lifespan(app: FastAPI):
     # Initialize status cache for all gateways (check actual status once on startup)
     initialize_gateway_status_cache()
 
-    # Stats poller DISABLED for debugging - uncomment when ready
-    # start_stats_poller()
+    # Start background stats poller
+    start_stats_poller()
 
     yield
 
-    # Stats poller DISABLED for debugging
-    # stop_stats_poller()
+    # Stop stats poller
+    stop_stats_poller()
     logger.info("RIST Gateway API shutting down...")
 
 app = FastAPI(
