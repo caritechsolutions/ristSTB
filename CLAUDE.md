@@ -6,17 +6,19 @@ Use curl with the GitHub raw URL and token to deploy files directly:
 
 ```bash
 # Download and deploy gateway_api.py
-curl -o /opt/ristgateway/gateway_api.py "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/gateway_api.py?token=TOKEN_HERE&$(date +%s)"
+curl -fsSL -H "Authorization: token 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" \
+  "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/gateway_api.py?$(date +%s)" \
+  -o /opt/ristgateway/gateway_api.py
 
 # Restart API after deploy
 systemctl restart ristgateway-api
 ```
 
-**Important:** Always add `&$(date +%s)` as cache buster at the end of the URL.
+**Important:** Always add `?$(date +%s)` as cache buster at the end of the URL.
 
 ## GitHub Token
 
-Token for raw file access: `[PASTE TOKEN HERE]`
+Token for raw file access: `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`
 
 ## Testing Stats Endpoint
 
