@@ -875,19 +875,19 @@ def _check_cgroup(gateway_id: str) -> dict:
 
 
 def _run_journalctl(service_name: str) -> str:
-    """Run journalctl synchronously - called in thread executor"""
-    proc = None
+    """Read journal stats via os.system() to avoid asyncio SIGCHLD conflict.
+
+    subprocess.Popen hangs inside uvicorn because asyncio's child watcher
+    reaps child processes via SIGCHLD before Popen.communicate()'s waitpid()
+    can collect them. os.system() uses C library system() which blocks
+    SIGCHLD before fork, avoiding this conflict.
+    """
     try:
-        proc = subprocess.Popen(
-            ['journalctl', '-u', service_name, '-n', '20', '--no-pager', '-o', 'cat'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        stdout, _ = proc.communicate(timeout=4)
-        return stdout.decode('utf-8', errors='replace')
-    except subprocess.TimeoutExpired:
-        if proc:
-            proc.kill()
-            proc.communicate()
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', service_name)
+        tmp_file = f"/tmp/{safe_name}-stats.tmp"
+        os.system(f"timeout 3 journalctl -u {safe_name} -n 20 --no-pager -o cat > {tmp_file} 2>/dev/null")
+        with open(tmp_file) as f:
+            return f.read()
     except Exception as e:
         logger.debug(f"journalctl failed: {e}")
     return ''
