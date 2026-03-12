@@ -10,6 +10,7 @@ import sys
 import yaml
 import json
 import time
+import asyncio
 import secrets
 import hashlib
 import logging
@@ -820,7 +821,7 @@ def remove_systemd_service(gateway_id: str):
         logger.info(f"Removed systemd service: {service_name}")
 
 def run_cmd(args, timeout=5) -> str:
-    """Run a command, kill it on timeout, return stdout or empty string"""
+    """Sync run_cmd for use outside request handlers (start/stop/restart)"""
     proc = None
     try:
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -835,13 +836,33 @@ def run_cmd(args, timeout=5) -> str:
         return ''
 
 
-def get_gateway_status(gateway_id: str) -> dict:
-    """Get current status of a gateway service using a single systemctl call"""
-    service_name = f"ristgateway-{gateway_id}.service"
+async def async_run_cmd(args, timeout=5) -> str:
+    """Async command runner - truly non-blocking, kills on timeout"""
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return stdout.decode('utf-8', errors='replace')
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            return ''
+    except Exception as e:
+        logger.debug(f"async_run_cmd {args[0]}: {e}")
+        return ''
 
+
+async def get_gateway_status(gateway_id: str) -> dict:
+    """Get gateway service status using a single async systemctl call"""
+    service_name = f"ristgateway-{gateway_id}.service"
     status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
 
-    out = run_cmd([
+    out = await async_run_cmd([
         'systemctl', 'show', service_name,
         '--property=ActiveState,MainPID,ActiveEnterTimestamp',
         '--no-pager'
@@ -864,7 +885,6 @@ def get_gateway_status(gateway_id: str) -> dict:
         pid_str = props.get('MainPID', '0')
         if pid_str.isdigit() and pid_str != '0':
             status['pid'] = int(pid_str)
-
         ts = props.get('ActiveEnterTimestamp', '')
         if ts:
             try:
@@ -1078,14 +1098,16 @@ async def change_password(request: PasswordChange):
 # =============================================================================
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
-def list_gateways():
+async def list_gateways():
     """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
 
+    # Fetch all gateway statuses concurrently
+    statuses = await asyncio.gather(*[get_gateway_status(gw_id) for gw_id in gateways])
+
     result = {}
-    for gw_id, gw in gateways.items():
-        status = get_gateway_status(gw_id)
+    for (gw_id, gw), status in zip(gateways.items(), statuses):
         result[gw_id] = {
             **gw,
             'id': gw_id,
@@ -1100,7 +1122,7 @@ def list_gateways():
     return {"gateways": result}
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-def get_gateway(gateway_id: str):
+async def get_gateway(gateway_id: str):
     """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1109,7 +1131,7 @@ def get_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     gw = gateways[gateway_id]
-    status = get_gateway_status(gateway_id)
+    status = await get_gateway_status(gateway_id)
 
     return {
         **gw,
@@ -1444,7 +1466,7 @@ def system_metrics():
 # =============================================================================
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
-def get_gateway_metrics(gateway_id: str):
+async def get_gateway_metrics(gateway_id: str):
     """Get current stats for a gateway and store to history for graphs"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1455,18 +1477,16 @@ def get_gateway_metrics(gateway_id: str):
     service_name = f"ristgateway-{gateway_id}"
     stats = {}
 
-    # Get status via single systemctl call (uses run_cmd which kills on timeout)
-    gw_status = get_gateway_status(gateway_id)
+    gw_status = await get_gateway_status(gateway_id)
     is_running = gw_status['running']
 
     if is_running:
-        journal_out = run_cmd(
+        journal_out = await async_run_cmd(
             ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
             timeout=5
         )
         if journal_out:
             stats = parse_rist_json_stats(journal_out)
-            # Store to history for graphs
             if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
                 update_gateway_stats(gateway_id, stats, True)
 

@@ -807,13 +807,13 @@
 
         // Load and update stats
         async function loadStats() {
-            if (!gateway || !gateway.running) return;
-
             try {
                 const response = await fetch(`${API_BASE}/gateways/${gatewayId}/stats`, { credentials: 'include' });
                 if (!response.ok) return;
 
                 const data = await response.json();
+                // Update running state from stats response (avoids separate gateway poll)
+                if (gateway) gateway.running = data.running;
                 updateStatsDisplay(data.stats);
             } catch (error) {
                 console.error('Failed to load stats:', error);
@@ -986,10 +986,9 @@
             loadStats();
             loadHistory();
             pollInterval = setInterval(() => {
-                loadGateway();
                 loadStats();
                 loadHistory();
-            }, 2000);  // Poll every 2 seconds to reduce API load
+            }, 2000);  // Gateway config loaded once; stats/history polled every 2s
         }
 
         function stopPolling() {
