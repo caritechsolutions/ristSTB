@@ -991,10 +991,8 @@ async def lifespan(app: FastAPI):
     if not os.path.exists(CONFIG_FILE):
         save_config({'gateways': {}, 'system': {'password_hash': hash_password('admin')}})
 
-    # Initialize status cache for all gateways (check actual status once on startup)
-    initialize_gateway_status_cache()
-
-    # No background poller - stats collected on-demand and history built by client polling
+    # No background poller - stats collected on-demand via /stats endpoint
+    # History builds up as client polls the stats endpoint
 
     yield
 
@@ -1078,21 +1076,20 @@ async def change_password(request: PasswordChange):
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
 def list_gateways():
-    """List all gateways with their status - uses cached status to avoid subprocess calls"""
+    """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     result = {}
     for gw_id, gw in gateways.items():
-        # Use cached status (no subprocess calls)
-        cached = get_cached_status(gw_id)
+        status = get_gateway_status(gw_id)
         result[gw_id] = {
             **gw,
             'id': gw_id,
-            'status': cached.get('status', 'unknown'),
-            'running': cached.get('running', False),
-            'pid': cached.get('pid'),
-            'uptime': cached.get('uptime'),
+            'status': status['status'],
+            'running': status['running'],
+            'pid': status.get('pid'),
+            'uptime': status.get('uptime'),
             'input_count': len(gw.get('inputs', [])),
             'output_count': len(gw.get('outputs', []))
         }
@@ -1101,7 +1098,7 @@ def list_gateways():
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
 def get_gateway(gateway_id: str):
-    """Get single gateway details - uses cached status to avoid subprocess calls"""
+    """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
 
@@ -1109,17 +1106,15 @@ def get_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     gw = gateways[gateway_id]
-
-    # Use cached status (no subprocess calls)
-    cached = get_cached_status(gateway_id)
+    status = get_gateway_status(gateway_id)
 
     return {
         **gw,
         'id': gateway_id,
-        'status': cached.get('status', 'unknown'),
-        'running': cached.get('running', False),
-        'pid': cached.get('pid'),
-        'uptime': cached.get('uptime')
+        'status': status['status'],
+        'running': status['running'],
+        'pid': status.get('pid'),
+        'uptime': status.get('uptime')
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
@@ -1447,14 +1442,13 @@ async def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get current stats for a gateway - also builds history and updates cache"""
+    """Get current stats for a gateway and store to history for graphs"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail="Gateway not found")
 
-    # Collect fresh stats directly from journal
     service_name = f"ristgateway-{gateway_id}"
     stats = {}
     is_running = False
@@ -1463,22 +1457,19 @@ def get_gateway_metrics(gateway_id: str):
         # Check if running
         result = subprocess.run(
             ['systemctl', 'is-active', f'{service_name}.service'],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, timeout=5
         )
         is_running = result.stdout.strip() == 'active'
-
-        # Update cached status so other endpoints stay fresh
-        update_cached_status(gateway_id, is_running, None, None)
 
         if is_running:
             # Get stats from journal
             result = subprocess.run(
                 ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
-                capture_output=True, text=True, timeout=2
+                capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0 and result.stdout:
                 stats = parse_rist_json_stats(result.stdout)
-                # Store to history for graphs (builds up as client polls)
+                # Store to history for graphs
                 if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
                     update_gateway_stats(gateway_id, stats, True)
     except subprocess.TimeoutExpired:
