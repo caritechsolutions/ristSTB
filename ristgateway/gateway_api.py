@@ -1453,6 +1453,11 @@ def get_gateway_metrics(gateway_id: str):
 
     # Direct status check (runs in thread pool)
     status = get_gateway_status(gateway_id)
+
+    # Collect fresh stats on-demand if running
+    if status['running']:
+        collect_gateway_stats(gateway_id, running=True)
+
     stats = get_gateway_stats(gateway_id)
 
     return {
