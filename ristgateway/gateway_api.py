@@ -841,79 +841,68 @@ def run_cmd(args, timeout=5) -> str:
         return ''
 
 
-async def async_run_cmd(args, timeout=5) -> str:
-    """Async command runner - truly non-blocking, kills on timeout"""
+def _check_cgroup(gateway_id: str) -> dict:
+    """Check service status via cgroup filesystem - no subprocess, instant"""
+    service_name = f"ristgateway-{gateway_id}.service"
+    status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
+
+    # cgroupv2 (Ubuntu 22.04+)
+    procs_file = f"/sys/fs/cgroup/system.slice/{service_name}/cgroup.procs"
+    if not os.path.exists(procs_file):
+        # cgroupv1 fallback
+        procs_file = f"/sys/fs/cgroup/systemd/system.slice/{service_name}/tasks"
+
+    if not os.path.exists(procs_file):
+        return status
+
+    try:
+        with open(procs_file) as f:
+            pids = [int(l.strip()) for l in f if l.strip().isdigit()]
+        if pids:
+            status['running'] = True
+            status['status'] = 'running'
+            status['pid'] = pids[0]
+            try:
+                proc = psutil.Process(pids[0])
+                start = datetime.fromtimestamp(proc.create_time())
+                status['uptime'] = str(datetime.now() - start).split('.')[0]
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug(f"cgroup check failed for {gateway_id}: {e}")
+
+    return status
+
+
+def _run_journalctl(service_name: str) -> str:
+    """Run journalctl synchronously - called in thread executor"""
     proc = None
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+        proc = subprocess.Popen(
+            ['journalctl', '-u', service_name, '-n', '20', '--no-pager', '-o', 'cat'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return stdout.decode('utf-8', errors='replace')
-        except asyncio.TimeoutError:
+        stdout, _ = proc.communicate(timeout=4)
+        return stdout.decode('utf-8', errors='replace')
+    except subprocess.TimeoutExpired:
+        if proc:
             proc.kill()
-            await proc.communicate()
-            return ''
+            proc.communicate()
     except Exception as e:
-        logger.debug(f"async_run_cmd {args[0]}: {e}")
-        return ''
+        logger.debug(f"journalctl failed: {e}")
+    return ''
 
 
 async def get_gateway_status(gateway_id: str) -> dict:
-    """Get gateway service status - cached with TTL, per-gateway locking"""
-    # Check cache first
+    """Get gateway service status via cgroup (no subprocess, cached with TTL)"""
     cached = _status_cache.get(gateway_id)
     if cached and (time.time() - cached['ts']) < STATUS_CACHE_TTL:
         return cached['status']
 
-    # Get or create per-gateway lock (prevents concurrent systemctl calls for same gateway)
-    if gateway_id not in _gateway_locks:
-        _gateway_locks[gateway_id] = asyncio.Lock()
-    lock = _gateway_locks[gateway_id]
-
-    async with lock:
-        # Re-check cache after acquiring lock (another coroutine may have updated it)
-        cached = _status_cache.get(gateway_id)
-        if cached and (time.time() - cached['ts']) < STATUS_CACHE_TTL:
-            return cached['status']
-
-        service_name = f"ristgateway-{gateway_id}.service"
-        status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
-
-        out = await async_run_cmd([
-            'systemctl', 'show', service_name,
-            '--property=ActiveState,MainPID,ActiveEnterTimestamp',
-            '--no-pager'
-        ], timeout=5)
-
-        if out:
-            props = {}
-            for line in out.splitlines():
-                if '=' in line:
-                    k, _, v = line.partition('=')
-                    props[k.strip()] = v.strip()
-
-            is_active = props.get('ActiveState') == 'active'
-            status['running'] = is_active
-            status['status'] = 'running' if is_active else 'stopped'
-
-            if is_active:
-                pid_str = props.get('MainPID', '0')
-                if pid_str.isdigit() and pid_str != '0':
-                    status['pid'] = int(pid_str)
-                ts = props.get('ActiveEnterTimestamp', '')
-                if ts:
-                    try:
-                        start_time = datetime.strptime(ts, '%a %Y-%m-%d %H:%M:%S %Z')
-                        status['uptime'] = str(datetime.now() - start_time)
-                    except Exception:
-                        pass
-
-        _status_cache[gateway_id] = {'status': status, 'ts': time.time()}
-        return status
+    # cgroup check is synchronous but instant (filesystem read)
+    status = _check_cgroup(gateway_id)
+    _status_cache[gateway_id] = {'status': status, 'ts': time.time()}
+    return status
 
 def start_gateway(gateway_id: str, gateway: dict) -> bool:
     """Start a gateway service"""
@@ -1501,10 +1490,14 @@ async def get_gateway_metrics(gateway_id: str):
     is_running = gw_status['running']
 
     if is_running:
-        journal_out = await async_run_cmd(
-            ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
-            timeout=5
-        )
+        loop = asyncio.get_event_loop()
+        try:
+            journal_out = await asyncio.wait_for(
+                loop.run_in_executor(None, _run_journalctl, service_name),
+                timeout=5
+            )
+        except asyncio.TimeoutError:
+            journal_out = ''
         if journal_out:
             stats = parse_rist_json_stats(journal_out)
             if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
