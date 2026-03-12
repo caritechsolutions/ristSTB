@@ -79,6 +79,31 @@ echo ""
 echo "Changes:"
 git log --oneline $CURRENT_COMMIT..$NEW_COMMIT 2>/dev/null || echo "  (new installation)"
 
+# Stop services before updating
+echo ""
+echo "Stopping services..."
+
+# Track which services were running so we can restart them
+API_WAS_RUNNING=false
+if systemctl is-active --quiet ristgateway-api.service 2>/dev/null; then
+    API_WAS_RUNNING=true
+    echo "Stopping Web API..."
+    systemctl stop ristgateway-api.service
+fi
+
+# Stop running gateways and remember which ones
+RUNNING_GATEWAYS=()
+for service in /etc/systemd/system/ristgateway-gateway*.service; do
+    if [ -f "$service" ]; then
+        service_name=$(basename "$service")
+        if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+            RUNNING_GATEWAYS+=("$service_name")
+            echo "Stopping $service_name..."
+            systemctl stop "$service_name"
+        fi
+    fi
+done
+
 # Rebuild librist
 echo ""
 echo "Rebuilding librist..."
@@ -152,23 +177,23 @@ cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
 # NOTE: We do NOT copy gateway_config.yaml to preserve existing configuration
 echo "[OK] Configuration preserved at /etc/ristgateway/gateway_config.yaml"
 
-# Restart API service
-if systemctl is-active --quiet ristgateway-api.service; then
-    echo "Restarting Web API..."
-    systemctl restart ristgateway-api.service
+# Restart services that were running before update
+echo ""
+echo "Starting services..."
+
+# Reload systemd to pick up any service file changes
+systemctl daemon-reload
+
+# Start API if it was running
+if [ "$API_WAS_RUNNING" = true ]; then
+    echo "Starting Web API..."
+    systemctl start ristgateway-api.service
 fi
 
-# Restart any running gateways to pick up new rist22rist binary
-echo ""
-echo "Checking for running gateways..."
-for service in /etc/systemd/system/ristgateway-gateway*.service; do
-    if [ -f "$service" ]; then
-        service_name=$(basename "$service")
-        if systemctl is-active --quiet "$service_name"; then
-            echo "Restarting $service_name..."
-            systemctl restart "$service_name"
-        fi
-    fi
+# Start gateways that were running
+for service_name in "${RUNNING_GATEWAYS[@]}"; do
+    echo "Starting $service_name..."
+    systemctl start "$service_name"
 done
 
 echo ""
