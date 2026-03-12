@@ -194,11 +194,12 @@ def parse_rist_json_stats(text: str) -> Dict:
 
     return metrics
 
-def update_gateway_stats(gateway_id: str, metrics: Dict):
+def update_gateway_stats(gateway_id: str, metrics: Dict, running: bool = True):
     """Update stats for a gateway"""
     with stats_lock:
         init_gateway_stats(gateway_id)
         metrics['last_update'] = datetime.now().isoformat()
+        metrics['running'] = running
         gateway_stats[gateway_id] = metrics
         gateway_stats_history[gateway_id].append({
             'timestamp': metrics['timestamp'],
@@ -619,6 +620,10 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str
 
+class BulkOperation(BaseModel):
+    operation: str
+    gateway_ids: List[str]
+
 # =============================================================================
 # Configuration Management
 # =============================================================================
@@ -1026,7 +1031,7 @@ async def change_password(request: PasswordChange):
 # =============================================================================
 
 @app.get("/api/gateways", dependencies=[Depends(auth_required)])
-async def list_gateways():
+def list_gateways():
     """List all gateways with their status"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1048,7 +1053,7 @@ async def list_gateways():
     return {"gateways": result}
 
 @app.get("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-async def get_gateway(gateway_id: str):
+def get_gateway(gateway_id: str):
     """Get single gateway details"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1069,7 +1074,7 @@ async def get_gateway(gateway_id: str):
     }
 
 @app.post("/api/gateways", dependencies=[Depends(auth_required)])
-async def create_gateway(gateway: GatewayConfig):
+def create_gateway(gateway: GatewayConfig):
     """Create a new gateway"""
     config = load_config()
     if 'gateways' not in config:
@@ -1099,7 +1104,7 @@ async def create_gateway(gateway: GatewayConfig):
     return {"id": gateway_id, "gateway": gw_data}
 
 @app.put("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-async def update_gateway(gateway_id: str, update: GatewayUpdate):
+def update_gateway(gateway_id: str, update: GatewayUpdate):
     """Update an existing gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1135,7 +1140,7 @@ async def update_gateway(gateway_id: str, update: GatewayUpdate):
     return {"id": gateway_id, "gateway": gw}
 
 @app.delete("/api/gateways/{gateway_id}", dependencies=[Depends(auth_required)])
-async def delete_gateway(gateway_id: str):
+def delete_gateway(gateway_id: str):
     """Delete a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1158,7 +1163,7 @@ async def delete_gateway(gateway_id: str):
 # =============================================================================
 
 @app.put("/api/gateways/{gateway_id}/start", dependencies=[Depends(auth_required)])
-async def api_start_gateway(gateway_id: str):
+def api_start_gateway(gateway_id: str):
     """Start a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1177,7 +1182,7 @@ async def api_start_gateway(gateway_id: str):
         raise HTTPException(status_code=500, detail="Failed to start gateway")
 
 @app.put("/api/gateways/{gateway_id}/stop", dependencies=[Depends(auth_required)])
-async def api_stop_gateway(gateway_id: str):
+def api_stop_gateway(gateway_id: str):
     """Stop a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1191,7 +1196,7 @@ async def api_stop_gateway(gateway_id: str):
         raise HTTPException(status_code=500, detail="Failed to stop gateway")
 
 @app.put("/api/gateways/{gateway_id}/restart", dependencies=[Depends(auth_required)])
-async def api_restart_gateway(gateway_id: str):
+def api_restart_gateway(gateway_id: str):
     """Restart a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1207,11 +1212,10 @@ async def api_restart_gateway(gateway_id: str):
         raise HTTPException(status_code=500, detail="Failed to restart gateway")
 
 @app.post("/api/gateways/bulk", dependencies=[Depends(auth_required)])
-async def bulk_operation(request: Request):
+def bulk_operation(request: BulkOperation):
     """Perform bulk operation on multiple gateways"""
-    data = await request.json()
-    operation = data.get('operation')  # start, stop, restart
-    gateway_ids = data.get('gateway_ids', [])
+    operation = request.operation
+    gateway_ids = request.gateway_ids
 
     if operation not in ['start', 'stop', 'restart']:
         raise HTTPException(status_code=400, detail="Invalid operation")
@@ -1244,7 +1248,7 @@ async def bulk_operation(request: Request):
 # =============================================================================
 
 @app.post("/api/gateways/{gateway_id}/inputs", dependencies=[Depends(auth_required)])
-async def add_input_peer(gateway_id: str, peer: PeerConfig):
+def add_input_peer(gateway_id: str, peer: PeerConfig):
     """Add an input peer to a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1268,7 +1272,7 @@ async def add_input_peer(gateway_id: str, peer: PeerConfig):
     return {"success": True, "inputs": gw['inputs']}
 
 @app.delete("/api/gateways/{gateway_id}/inputs/{index}", dependencies=[Depends(auth_required)])
-async def remove_input_peer(gateway_id: str, index: int):
+def remove_input_peer(gateway_id: str, index: int):
     """Remove an input peer from a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1295,7 +1299,7 @@ async def remove_input_peer(gateway_id: str, index: int):
     return {"success": True, "inputs": gw['inputs']}
 
 @app.post("/api/gateways/{gateway_id}/outputs", dependencies=[Depends(auth_required)])
-async def add_output_peer(gateway_id: str, peer: PeerConfig):
+def add_output_peer(gateway_id: str, peer: PeerConfig):
     """Add an output peer to a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1319,7 +1323,7 @@ async def add_output_peer(gateway_id: str, peer: PeerConfig):
     return {"success": True, "outputs": gw['outputs']}
 
 @app.delete("/api/gateways/{gateway_id}/outputs/{index}", dependencies=[Depends(auth_required)])
-async def remove_output_peer(gateway_id: str, index: int):
+def remove_output_peer(gateway_id: str, index: int):
     """Remove an output peer from a gateway"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -1394,12 +1398,12 @@ async def get_gateway_metrics(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     # Return cached stats (background poller keeps these updated)
+    # Do NOT call get_gateway_status() here - it blocks the event loop
     stats = get_gateway_stats(gateway_id)
-    status = get_gateway_status(gateway_id)
 
     return {
         "gateway_id": gateway_id,
-        "running": status['running'],
+        "running": stats.get('running', False),
         "stats": stats
     }
 
