@@ -371,7 +371,7 @@ def parse_prometheus_metrics(text: str) -> Dict:
     return metrics
 
 
-def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int):
+def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int, running: bool = True):
     """Collect stats from rist22rist metrics HTTP endpoint"""
     import urllib.request
     import urllib.error
@@ -387,7 +387,7 @@ def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int):
             metrics = parse_prometheus_metrics(data)
 
             if metrics['peers'] > 0 or metrics['packets']['received'] > 0 or metrics['quality'] > 0:
-                update_gateway_stats(gateway_id, metrics)
+                update_gateway_stats(gateway_id, metrics, running)
                 return True
 
     except urllib.error.URLError as e:
@@ -485,7 +485,7 @@ def parse_metrics_json(data: dict) -> Dict:
     return metrics
 
 
-def collect_gateway_stats(gateway_id: str):
+def collect_gateway_stats(gateway_id: str, running: bool = True):
     """Collect stats for a gateway - tries HTTP first, falls back to journal"""
     config = load_config()
     gateways = config.get('gateways', {})
@@ -498,14 +498,14 @@ def collect_gateway_stats(gateway_id: str):
 
     # Try HTTP metrics endpoint first
     if metrics_port:
-        if collect_stats_from_metrics_http(gateway_id, metrics_port):
+        if collect_stats_from_metrics_http(gateway_id, metrics_port, running):
             return
 
     # Fallback to journal parsing
-    collect_stats_from_journal(gateway_id)
+    collect_stats_from_journal(gateway_id, running)
 
 
-def collect_stats_from_journal(gateway_id: str):
+def collect_stats_from_journal(gateway_id: str, running: bool = True):
     """Collect latest stats from journald for a gateway (fallback)"""
     service_name = f"ristgateway-{gateway_id}"
     try:
@@ -516,7 +516,7 @@ def collect_stats_from_journal(gateway_id: str):
         if result.returncode == 0 and result.stdout:
             metrics = parse_rist_json_stats(result.stdout)
             if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
-                update_gateway_stats(gateway_id, metrics)
+                update_gateway_stats(gateway_id, metrics, running)
     except Exception as e:
         logger.error(f"Error collecting stats from journal for {gateway_id}: {e}")
 
@@ -526,19 +526,40 @@ def stats_poller_loop():
     global stats_poller_running
     logger.info("Stats poller started")
 
+    # Cache running status to reduce systemctl calls
+    running_cache = {}  # gateway_id -> {'running': bool, 'last_check': time}
+    STATUS_CHECK_INTERVAL = 5  # Only check systemctl every 5 seconds
+
     while stats_poller_running:
         try:
             config = load_config()
             gateways = config.get('gateways', {})
+            current_time = time.time()
 
             for gateway_id, gw in gateways.items():
                 if not stats_poller_running:
                     break
 
-                # Check if gateway is running
-                status = get_gateway_status(gateway_id)
-                if status['running']:
-                    collect_gateway_stats(gateway_id)
+                # Check running status from cache or refresh if stale
+                cache_entry = running_cache.get(gateway_id)
+                if not cache_entry or (current_time - cache_entry['last_check']) > STATUS_CHECK_INTERVAL:
+                    # Time to check actual status
+                    status = get_gateway_status(gateway_id)
+                    running_cache[gateway_id] = {
+                        'running': status['running'],
+                        'last_check': current_time
+                    }
+                    is_running = status['running']
+                else:
+                    is_running = cache_entry['running']
+
+                if is_running:
+                    collect_gateway_stats(gateway_id, running=True)
+                else:
+                    # Update stats with running=False so UI shows correct status
+                    with stats_lock:
+                        if gateway_id in gateway_stats:
+                            gateway_stats[gateway_id]['running'] = False
 
             # Sleep for 1 second between poll cycles
             for _ in range(10):  # Check every 100ms if we should stop
