@@ -56,6 +56,11 @@ stats_lock = threading.Lock()
 stats_poller_thread = None
 stats_poller_running = False
 
+# Status cache with TTL to avoid hammering systemctl on every request
+STATUS_CACHE_TTL = 2.0  # seconds
+_status_cache: Dict[str, Dict] = {}  # {gateway_id: {status, timestamp}}
+_gateway_locks: Dict[str, asyncio.Lock] = {}  # per-gateway async locks (lazy-init)
+
 def init_gateway_stats(gateway_id: str):
     """Initialize stats storage for a gateway"""
     with stats_lock:
@@ -858,42 +863,57 @@ async def async_run_cmd(args, timeout=5) -> str:
 
 
 async def get_gateway_status(gateway_id: str) -> dict:
-    """Get gateway service status using a single async systemctl call"""
-    service_name = f"ristgateway-{gateway_id}.service"
-    status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
+    """Get gateway service status - cached with TTL, per-gateway locking"""
+    # Check cache first
+    cached = _status_cache.get(gateway_id)
+    if cached and (time.time() - cached['ts']) < STATUS_CACHE_TTL:
+        return cached['status']
 
-    out = await async_run_cmd([
-        'systemctl', 'show', service_name,
-        '--property=ActiveState,MainPID,ActiveEnterTimestamp',
-        '--no-pager'
-    ], timeout=5)
+    # Get or create per-gateway lock (prevents concurrent systemctl calls for same gateway)
+    if gateway_id not in _gateway_locks:
+        _gateway_locks[gateway_id] = asyncio.Lock()
+    lock = _gateway_locks[gateway_id]
 
-    if not out:
+    async with lock:
+        # Re-check cache after acquiring lock (another coroutine may have updated it)
+        cached = _status_cache.get(gateway_id)
+        if cached and (time.time() - cached['ts']) < STATUS_CACHE_TTL:
+            return cached['status']
+
+        service_name = f"ristgateway-{gateway_id}.service"
+        status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
+
+        out = await async_run_cmd([
+            'systemctl', 'show', service_name,
+            '--property=ActiveState,MainPID,ActiveEnterTimestamp',
+            '--no-pager'
+        ], timeout=5)
+
+        if out:
+            props = {}
+            for line in out.splitlines():
+                if '=' in line:
+                    k, _, v = line.partition('=')
+                    props[k.strip()] = v.strip()
+
+            is_active = props.get('ActiveState') == 'active'
+            status['running'] = is_active
+            status['status'] = 'running' if is_active else 'stopped'
+
+            if is_active:
+                pid_str = props.get('MainPID', '0')
+                if pid_str.isdigit() and pid_str != '0':
+                    status['pid'] = int(pid_str)
+                ts = props.get('ActiveEnterTimestamp', '')
+                if ts:
+                    try:
+                        start_time = datetime.strptime(ts, '%a %Y-%m-%d %H:%M:%S %Z')
+                        status['uptime'] = str(datetime.now() - start_time)
+                    except Exception:
+                        pass
+
+        _status_cache[gateway_id] = {'status': status, 'ts': time.time()}
         return status
-
-    props = {}
-    for line in out.splitlines():
-        if '=' in line:
-            k, _, v = line.partition('=')
-            props[k.strip()] = v.strip()
-
-    is_active = props.get('ActiveState') == 'active'
-    status['running'] = is_active
-    status['status'] = 'running' if is_active else 'stopped'
-
-    if is_active:
-        pid_str = props.get('MainPID', '0')
-        if pid_str.isdigit() and pid_str != '0':
-            status['pid'] = int(pid_str)
-        ts = props.get('ActiveEnterTimestamp', '')
-        if ts:
-            try:
-                start_time = datetime.strptime(ts, '%a %Y-%m-%d %H:%M:%S %Z')
-                status['uptime'] = str(datetime.now() - start_time)
-            except Exception:
-                pass
-
-    return status
 
 def start_gateway(gateway_id: str, gateway: dict) -> bool:
     """Start a gateway service"""
