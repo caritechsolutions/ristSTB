@@ -147,16 +147,32 @@ ldconfig
 # Verify installation
 echo ""
 echo "Verifying installation..."
+RIST22RIST_BIN=""
 if command -v rist22rist &> /dev/null; then
+    RIST22RIST_BIN="rist22rist"
+elif [ -f /usr/local/bin/rist22rist ]; then
+    RIST22RIST_BIN="/usr/local/bin/rist22rist"
+fi
+
+if [ -n "$RIST22RIST_BIN" ]; then
     echo "rist22rist installed successfully!"
-    rist22rist --help | head -20
-else
-    echo "Warning: rist22rist not found in PATH"
-    echo "It may be installed at /usr/local/bin/rist22rist"
-    if [ -f /usr/local/bin/rist22rist ]; then
-        echo "Found at /usr/local/bin/rist22rist"
-        /usr/local/bin/rist22rist --help | head -20
+
+    # Check if metrics support is enabled
+    if $RIST22RIST_BIN --help 2>&1 | grep -q "metrics-http"; then
+        echo ""
+        echo "[OK] HTTP Metrics support enabled (prometheus/libmicrohttpd)"
+    else
+        echo ""
+        echo "[WARNING] HTTP Metrics support NOT enabled"
+        echo "  This may happen if libmicrohttpd was not detected during build."
+        echo "  Stats will fall back to journald parsing."
     fi
+
+    echo ""
+    $RIST22RIST_BIN --help | head -25
+else
+    echo "[ERROR] rist22rist not found!"
+    exit 1
 fi
 
 # Install Web API
