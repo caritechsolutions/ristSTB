@@ -220,6 +220,156 @@ def get_gateway_stats_history(gateway_id: str) -> List[Dict]:
             return list(gateway_stats_history[gateway_id])
         return []
 
+def parse_prometheus_metrics(text: str) -> Dict:
+    """Parse Prometheus/OpenMetrics format from rist22rist metrics endpoint"""
+    metrics = {
+        'quality': 0,
+        'peers': 0,
+        'bandwidth': 0,
+        'retry_bandwidth': 0,
+        'rtt': 0,
+        'packets': {
+            'sent': 0,
+            'received': 0,
+            'missing': 0,
+            'reordered': 0,
+            'recovered': 0,
+            'recovered_one_retry': 0,
+            'lost': 0
+        },
+        'timing': {
+            'min_iat': 0,
+            'cur_iat': 0,
+            'max_iat': 0
+        },
+        'peer_details': [],
+        'sender': {},
+        'timestamp': datetime.now().isoformat()
+    }
+
+    # Aggregate values across all flows
+    flow_data = {}  # flow_id -> metrics
+
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        # Parse: metric_name{labels} value
+        match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\{([^}]*)\}\s+(.+)$', line)
+        if not match:
+            # Try without labels
+            match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$', line)
+            if match:
+                metric_name = match.group(1)
+                value = float(match.group(2))
+                labels = {}
+            else:
+                continue
+        else:
+            metric_name = match.group(1)
+            labels_str = match.group(2)
+            value = float(match.group(3))
+
+            # Parse labels
+            labels = {}
+            for label_match in re.finditer(r'(\w+)="([^"]*)"', labels_str):
+                labels[label_match.group(1)] = label_match.group(2)
+
+        flow_id = labels.get('flow_id', 'default')
+
+        # Initialize flow if needed
+        if flow_id not in flow_data:
+            flow_data[flow_id] = {
+                'quality': 0, 'bandwidth': 0, 'retry_bandwidth': 0, 'rtt': 0, 'peers': 0,
+                'received': 0, 'sent': 0, 'missing': 0, 'reordered': 0,
+                'recovered': 0, 'recovered_one_retry': 0, 'lost': 0,
+                'min_iat': 0, 'cur_iat': 0, 'max_iat': 0
+            }
+
+        fd = flow_data[flow_id]
+
+        # Map metrics
+        if metric_name == 'rist_client_flow_quality':
+            fd['quality'] = value
+        elif metric_name == 'rist_client_flow_peers':
+            fd['peers'] = int(value)
+        elif metric_name == 'rist_client_flow_bandwidth_bps':
+            fd['bandwidth'] = value / 1_000_000  # bps to Mbps
+        elif metric_name == 'rist_client_flow_retry_bandwidth_bps':
+            fd['retry_bandwidth'] = value / 1_000_000
+        elif metric_name == 'rist_client_flow_rtt_seconds':
+            fd['rtt'] = value * 1000  # seconds to ms
+        elif metric_name == 'rist_client_flow_received_packets_total':
+            fd['received'] = int(value)
+        elif metric_name == 'rist_client_flow_sent_packets_total':
+            fd['sent'] = int(value)
+        elif metric_name == 'rist_client_flow_missing_packets_total':
+            fd['missing'] = int(value)
+        elif metric_name == 'rist_client_flow_reordered_packets_total':
+            fd['reordered'] = int(value)
+        elif metric_name == 'rist_client_flow_recovered_packets_total':
+            fd['recovered'] = int(value)
+        elif metric_name == 'rist_client_flow_recovered_one_retry_packets_total':
+            fd['recovered_one_retry'] = int(value)
+        elif metric_name == 'rist_client_flow_lost_packets_total':
+            fd['lost'] = int(value)
+        elif metric_name == 'rist_client_flow_min_iat_seconds':
+            fd['min_iat'] = value * 1000  # seconds to ms
+        elif metric_name == 'rist_client_flow_cur_iat_seconds':
+            fd['cur_iat'] = value * 1000
+        elif metric_name == 'rist_client_flow_max_iat_seconds':
+            fd['max_iat'] = value * 1000
+
+    # Aggregate all flows
+    if flow_data:
+        total_bandwidth = 0
+        total_quality = 0
+        total_peers = 0
+        quality_count = 0
+
+        for fid, fd in flow_data.items():
+            total_bandwidth += fd['bandwidth']
+            total_peers += fd['peers']
+            if fd['quality'] > 0:
+                total_quality += fd['quality']
+                quality_count += 1
+
+            # Sum packet counters
+            metrics['packets']['received'] += fd['received']
+            metrics['packets']['sent'] += fd['sent']
+            metrics['packets']['missing'] += fd['missing']
+            metrics['packets']['reordered'] += fd['reordered']
+            metrics['packets']['recovered'] += fd['recovered']
+            metrics['packets']['recovered_one_retry'] += fd['recovered_one_retry']
+            metrics['packets']['lost'] += fd['lost']
+
+            # Use max timing values
+            metrics['timing']['min_iat'] = max(metrics['timing']['min_iat'], fd['min_iat'])
+            metrics['timing']['cur_iat'] = max(metrics['timing']['cur_iat'], fd['cur_iat'])
+            metrics['timing']['max_iat'] = max(metrics['timing']['max_iat'], fd['max_iat'])
+
+            # RTT - use first non-zero
+            if fd['rtt'] > 0 and metrics['rtt'] == 0:
+                metrics['rtt'] = fd['rtt']
+
+            # Add as peer detail
+            metrics['peer_details'].append({
+                'id': fid,
+                'dead': 0,
+                'rtt': fd['rtt'],
+                'bitrate': fd['bandwidth'],
+                'quality': fd['quality']
+            })
+
+        metrics['bandwidth'] = total_bandwidth
+        metrics['retry_bandwidth'] = sum(fd['retry_bandwidth'] for fd in flow_data.values())
+        metrics['peers'] = total_peers if total_peers > 0 else len(flow_data)
+        metrics['quality'] = total_quality / quality_count if quality_count > 0 else 0
+
+    return metrics
+
+
 def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int):
     """Collect stats from rist22rist metrics HTTP endpoint"""
     import urllib.request
@@ -227,18 +377,13 @@ def collect_stats_from_metrics_http(gateway_id: str, metrics_port: int):
 
     try:
         url = f"http://127.0.0.1:{metrics_port}/metrics"
-        req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+        req = urllib.request.Request(url)
 
         with urllib.request.urlopen(req, timeout=2) as response:
             data = response.read().decode('utf-8')
 
-            # Try to parse as JSON first
-            try:
-                json_data = json.loads(data)
-                metrics = parse_metrics_json(json_data)
-            except json.JSONDecodeError:
-                # Might be Prometheus format
-                metrics = parse_rist_json_stats(data)
+            # Parse Prometheus format
+            metrics = parse_prometheus_metrics(data)
 
             if metrics['peers'] > 0 or metrics['packets']['received'] > 0 or metrics['quality'] > 0:
                 update_gateway_stats(gateway_id, metrics)
@@ -606,7 +751,7 @@ def write_systemd_service(gateway_id: str, gateway: dict):
         f.write(content)
 
     # Reload systemd
-    subprocess.run(['systemctl', 'daemon-reload'], check=True)
+    subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
     logger.info(f"Created systemd service: {service_name}")
 
 def remove_systemd_service(gateway_id: str):
@@ -615,23 +760,26 @@ def remove_systemd_service(gateway_id: str):
     service_path = os.path.join(SYSTEMD_DIR, service_name)
 
     # Stop service if running
-    subprocess.run(['systemctl', 'stop', service_name], capture_output=True)
-    subprocess.run(['systemctl', 'disable', service_name], capture_output=True)
+    subprocess.run(['systemctl', 'stop', service_name], capture_output=True, timeout=30)
+    subprocess.run(['systemctl', 'disable', service_name], capture_output=True, timeout=10)
 
     if os.path.exists(service_path):
         os.remove(service_path)
-        subprocess.run(['systemctl', 'daemon-reload'], check=True)
+        subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
         logger.info(f"Removed systemd service: {service_name}")
 
 def get_gateway_status(gateway_id: str) -> dict:
     """Get current status of a gateway service"""
     service_name = f"ristgateway-{gateway_id}.service"
 
-    result = subprocess.run(
-        ['systemctl', 'is-active', service_name],
-        capture_output=True, text=True
-    )
-    is_active = result.stdout.strip() == 'active'
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', service_name],
+            capture_output=True, text=True, timeout=5
+        )
+        is_active = result.stdout.strip() == 'active'
+    except subprocess.TimeoutExpired:
+        is_active = False
 
     status = {
         'running': is_active,
@@ -642,28 +790,34 @@ def get_gateway_status(gateway_id: str) -> dict:
 
     if is_active:
         # Get PID
-        result = subprocess.run(
-            ['systemctl', 'show', '-p', 'MainPID', service_name],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            match = re.search(r'MainPID=(\d+)', result.stdout)
-            if match:
-                status['pid'] = int(match.group(1))
+        try:
+            result = subprocess.run(
+                ['systemctl', 'show', '-p', 'MainPID', service_name],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                match = re.search(r'MainPID=(\d+)', result.stdout)
+                if match:
+                    status['pid'] = int(match.group(1))
+        except subprocess.TimeoutExpired:
+            pass
 
         # Get uptime
-        result = subprocess.run(
-            ['systemctl', 'show', '-p', 'ActiveEnterTimestamp', service_name],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0 and 'ActiveEnterTimestamp=' in result.stdout:
-            try:
-                timestamp_str = result.stdout.split('=')[1].strip()
-                if timestamp_str:
-                    start_time = datetime.strptime(timestamp_str, '%a %Y-%m-%d %H:%M:%S %Z')
-                    status['uptime'] = str(datetime.now() - start_time)
-            except Exception:
-                pass
+        try:
+            result = subprocess.run(
+                ['systemctl', 'show', '-p', 'ActiveEnterTimestamp', service_name],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and 'ActiveEnterTimestamp=' in result.stdout:
+                try:
+                    timestamp_str = result.stdout.split('=')[1].strip()
+                    if timestamp_str:
+                        start_time = datetime.strptime(timestamp_str, '%a %Y-%m-%d %H:%M:%S %Z')
+                        status['uptime'] = str(datetime.now() - start_time)
+                except Exception:
+                    pass
+        except subprocess.TimeoutExpired:
+            pass
 
     return status
 
@@ -675,28 +829,36 @@ def start_gateway(gateway_id: str, gateway: dict) -> bool:
     service_name = f"ristgateway-{gateway_id}.service"
 
     # Enable and start
-    subprocess.run(['systemctl', 'enable', service_name], capture_output=True)
-    result = subprocess.run(['systemctl', 'start', service_name], capture_output=True, text=True)
+    try:
+        subprocess.run(['systemctl', 'enable', service_name], capture_output=True, timeout=10)
+        result = subprocess.run(['systemctl', 'start', service_name], capture_output=True, text=True, timeout=30)
 
-    if result.returncode != 0:
-        logger.error(f"Failed to start {service_name}: {result.stderr}")
+        if result.returncode != 0:
+            logger.error(f"Failed to start {service_name}: {result.stderr}")
+            return False
+
+        logger.info(f"Started gateway: {gateway_id}")
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout starting {service_name}")
         return False
-
-    logger.info(f"Started gateway: {gateway_id}")
-    return True
 
 def stop_gateway(gateway_id: str) -> bool:
     """Stop a gateway service"""
     service_name = f"ristgateway-{gateway_id}.service"
 
-    result = subprocess.run(['systemctl', 'stop', service_name], capture_output=True, text=True)
+    try:
+        result = subprocess.run(['systemctl', 'stop', service_name], capture_output=True, text=True, timeout=30)
 
-    if result.returncode != 0:
-        logger.error(f"Failed to stop {service_name}: {result.stderr}")
+        if result.returncode != 0:
+            logger.error(f"Failed to stop {service_name}: {result.stderr}")
+            return False
+
+        logger.info(f"Stopped gateway: {gateway_id}")
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout stopping {service_name}")
         return False
-
-    logger.info(f"Stopped gateway: {gateway_id}")
-    return True
 
 def restart_gateway(gateway_id: str, gateway: dict) -> bool:
     """Restart a gateway service"""
@@ -704,14 +866,18 @@ def restart_gateway(gateway_id: str, gateway: dict) -> bool:
     write_systemd_service(gateway_id, gateway)
 
     service_name = f"ristgateway-{gateway_id}.service"
-    result = subprocess.run(['systemctl', 'restart', service_name], capture_output=True, text=True)
+    try:
+        result = subprocess.run(['systemctl', 'restart', service_name], capture_output=True, text=True, timeout=30)
 
-    if result.returncode != 0:
-        logger.error(f"Failed to restart {service_name}: {result.stderr}")
+        if result.returncode != 0:
+            logger.error(f"Failed to restart {service_name}: {result.stderr}")
+            return False
+
+        logger.info(f"Restarted gateway: {gateway_id}")
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout restarting {service_name}")
         return False
-
-    logger.info(f"Restarted gateway: {gateway_id}")
-    return True
 
 # =============================================================================
 # Authentication
