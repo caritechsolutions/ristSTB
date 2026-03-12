@@ -819,56 +819,59 @@ def remove_systemd_service(gateway_id: str):
         subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
         logger.info(f"Removed systemd service: {service_name}")
 
+def run_cmd(args, timeout=5) -> str:
+    """Run a command, kill it on timeout, return stdout or empty string"""
+    proc = None
+    try:
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, _ = proc.communicate(timeout=timeout)
+        return stdout.decode('utf-8', errors='replace')
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+            proc.communicate()
+        return ''
+    except Exception:
+        return ''
+
+
 def get_gateway_status(gateway_id: str) -> dict:
-    """Get current status of a gateway service"""
+    """Get current status of a gateway service using a single systemctl call"""
     service_name = f"ristgateway-{gateway_id}.service"
 
-    try:
-        result = subprocess.run(
-            ['systemctl', 'is-active', service_name],
-            capture_output=True, text=True, timeout=5
-        )
-        is_active = result.stdout.strip() == 'active'
-    except subprocess.TimeoutExpired:
-        is_active = False
+    status = {'running': False, 'status': 'stopped', 'pid': None, 'uptime': None}
 
-    status = {
-        'running': is_active,
-        'status': 'running' if is_active else 'stopped',
-        'pid': None,
-        'uptime': None
-    }
+    out = run_cmd([
+        'systemctl', 'show', service_name,
+        '--property=ActiveState,MainPID,ActiveEnterTimestamp',
+        '--no-pager'
+    ], timeout=5)
+
+    if not out:
+        return status
+
+    props = {}
+    for line in out.splitlines():
+        if '=' in line:
+            k, _, v = line.partition('=')
+            props[k.strip()] = v.strip()
+
+    is_active = props.get('ActiveState') == 'active'
+    status['running'] = is_active
+    status['status'] = 'running' if is_active else 'stopped'
 
     if is_active:
-        # Get PID
-        try:
-            result = subprocess.run(
-                ['systemctl', 'show', '-p', 'MainPID', service_name],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                match = re.search(r'MainPID=(\d+)', result.stdout)
-                if match:
-                    status['pid'] = int(match.group(1))
-        except subprocess.TimeoutExpired:
-            pass
+        pid_str = props.get('MainPID', '0')
+        if pid_str.isdigit() and pid_str != '0':
+            status['pid'] = int(pid_str)
 
-        # Get uptime
-        try:
-            result = subprocess.run(
-                ['systemctl', 'show', '-p', 'ActiveEnterTimestamp', service_name],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and 'ActiveEnterTimestamp=' in result.stdout:
-                try:
-                    timestamp_str = result.stdout.split('=')[1].strip()
-                    if timestamp_str:
-                        start_time = datetime.strptime(timestamp_str, '%a %Y-%m-%d %H:%M:%S %Z')
-                        status['uptime'] = str(datetime.now() - start_time)
-                except Exception:
-                    pass
-        except subprocess.TimeoutExpired:
-            pass
+        ts = props.get('ActiveEnterTimestamp', '')
+        if ts:
+            try:
+                start_time = datetime.strptime(ts, '%a %Y-%m-%d %H:%M:%S %Z')
+                status['uptime'] = str(datetime.now() - start_time)
+            except Exception:
+                pass
 
     return status
 
@@ -1406,7 +1409,7 @@ def remove_output_peer(gateway_id: str, index: int):
 # =============================================================================
 
 @app.get("/api/system/metrics", dependencies=[Depends(auth_required)])
-async def system_metrics():
+def system_metrics():
     """Get system metrics"""
     cpu_percent = psutil.cpu_percent(interval=0.1)
     memory = psutil.virtual_memory()
@@ -1451,31 +1454,21 @@ def get_gateway_metrics(gateway_id: str):
 
     service_name = f"ristgateway-{gateway_id}"
     stats = {}
-    is_running = False
 
-    try:
-        # Check if running
-        result = subprocess.run(
-            ['systemctl', 'is-active', f'{service_name}.service'],
-            capture_output=True, text=True, timeout=5
+    # Get status via single systemctl call (uses run_cmd which kills on timeout)
+    gw_status = get_gateway_status(gateway_id)
+    is_running = gw_status['running']
+
+    if is_running:
+        journal_out = run_cmd(
+            ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
+            timeout=5
         )
-        is_running = result.stdout.strip() == 'active'
-
-        if is_running:
-            # Get stats from journal
-            result = subprocess.run(
-                ['journalctl', '-u', service_name, '-n', '10', '--no-pager', '-o', 'cat'],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout:
-                stats = parse_rist_json_stats(result.stdout)
-                # Store to history for graphs
-                if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
-                    update_gateway_stats(gateway_id, stats, True)
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Timeout getting stats for {gateway_id}")
-    except Exception as e:
-        logger.warning(f"Error getting stats for {gateway_id}: {e}")
+        if journal_out:
+            stats = parse_rist_json_stats(journal_out)
+            # Store to history for graphs
+            if stats.get('peers', 0) > 0 or stats.get('packets', {}).get('received', 0) > 0:
+                update_gateway_stats(gateway_id, stats, True)
 
     return {
         "gateway_id": gateway_id,
@@ -1484,7 +1477,7 @@ def get_gateway_metrics(gateway_id: str):
     }
 
 @app.get("/api/gateways/{gateway_id}/stats/history", dependencies=[Depends(auth_required)])
-async def get_gateway_metrics_history(gateway_id: str):
+def get_gateway_metrics_history(gateway_id: str):
     """Get historical stats for graphing"""
     config = load_config()
     gateways = config.get('gateways', {})
