@@ -163,6 +163,52 @@
             justify-content: center;
         }
 
+        /* Dropdown */
+        .dropdown {
+            position: relative;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            min-width: 200px;
+            padding: 8px 0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 16px;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .dropdown-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .dropdown-item svg {
+            color: var(--text-secondary);
+        }
+
         /* Main Content */
         .main-content {
             max-width: 1600px;
@@ -574,6 +620,36 @@
                     </svg>
                     New Gateway
                 </button>
+                <div class="dropdown">
+                    <button class="btn btn-secondary" onclick="toggleConfigMenu()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                        </svg>
+                        Config
+                    </button>
+                    <div class="dropdown-menu" id="config-menu">
+                        <button class="dropdown-item" onclick="downloadBackup()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                            Download Backup
+                        </button>
+                        <button class="dropdown-item" onclick="showRestoreModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            Restore Backup
+                        </button>
+                        <button class="dropdown-item" id="revert-btn" onclick="revertConfig()" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/>
+                                <path d="M3 3v5h5"/>
+                            </svg>
+                            Revert to Previous
+                        </button>
+                    </div>
+                </div>
                 <button class="btn btn-secondary btn-icon" onclick="refreshGateways()" title="Refresh">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -662,6 +738,32 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
                 <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Config Modal -->
+    <div class="modal-overlay" id="restore-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Restore Configuration</span>
+                <button class="modal-close" onclick="closeRestoreModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Select a backup file to restore:</p>
+                <input type="file" id="restore-file" accept=".json" style="margin: 16px 0; width: 100%;">
+                <div id="restore-info" style="display: none; padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-top: 12px;">
+                    <p><strong>Source:</strong> <span id="restore-hostname">-</span></p>
+                    <p><strong>Channels:</strong> <span id="restore-count">0</span></p>
+                    <p><strong>Backup Date:</strong> <span id="restore-date">-</span></p>
+                </div>
+                <p style="color: var(--accent-orange); margin-top: 12px; font-size: 13px;">
+                    Warning: This will stop all running channels and replace the current configuration.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+                <button class="btn btn-primary" id="restore-confirm-btn" onclick="confirmRestore()" disabled>Restore</button>
             </div>
         </div>
     </div>
@@ -1123,6 +1225,161 @@
             return div.innerHTML;
         }
 
+        // =============================================================================
+        // Config Backup/Restore Functions
+        // =============================================================================
+
+        let restoreData = null;
+
+        function toggleConfigMenu() {
+            const menu = document.getElementById('config-menu');
+            menu.classList.toggle('show');
+            checkBackupExists();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dropdown')) {
+                document.getElementById('config-menu')?.classList.remove('show');
+            }
+        });
+
+        async function checkBackupExists() {
+            try {
+                const response = await fetch(`${API_BASE}/config/has-backup`, { credentials: 'include' });
+                const data = await response.json();
+                const revertBtn = document.getElementById('revert-btn');
+                if (data.has_backup) {
+                    revertBtn.style.display = 'flex';
+                } else {
+                    revertBtn.style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Failed to check backup:', e);
+            }
+        }
+
+        async function downloadBackup() {
+            document.getElementById('config-menu').classList.remove('show');
+            try {
+                const response = await fetch(`${API_BASE}/config/backup`, { credentials: 'include' });
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const filename = response.headers.get('Content-Disposition')?.match(/filename=(.+)/)?.[1]
+                    || `ristgateway_backup_${new Date().toISOString().slice(0,10)}.json`;
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Failed to download backup');
+            }
+        }
+
+        function showRestoreModal() {
+            document.getElementById('config-menu').classList.remove('show');
+            document.getElementById('restore-modal').style.display = 'flex';
+            document.getElementById('restore-file').value = '';
+            document.getElementById('restore-info').style.display = 'none';
+            document.getElementById('restore-confirm-btn').disabled = true;
+            restoreData = null;
+        }
+
+        function closeRestoreModal() {
+            document.getElementById('restore-modal').style.display = 'none';
+            restoreData = null;
+        }
+
+        // Handle file selection
+        document.getElementById('restore-file')?.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                restoreData = JSON.parse(text);
+
+                if (!restoreData.gateways) {
+                    throw new Error('Invalid backup format');
+                }
+
+                document.getElementById('restore-hostname').textContent = restoreData.hostname || 'Unknown';
+                document.getElementById('restore-count').textContent = Object.keys(restoreData.gateways).length;
+                document.getElementById('restore-date').textContent = restoreData.timestamp
+                    ? new Date(restoreData.timestamp).toLocaleString()
+                    : 'Unknown';
+                document.getElementById('restore-info').style.display = 'block';
+                document.getElementById('restore-confirm-btn').disabled = false;
+            } catch (e) {
+                alert('Invalid backup file: ' + e.message);
+                restoreData = null;
+                document.getElementById('restore-info').style.display = 'none';
+                document.getElementById('restore-confirm-btn').disabled = true;
+            }
+        });
+
+        async function confirmRestore() {
+            if (!restoreData) return;
+
+            const btn = document.getElementById('restore-confirm-btn');
+            btn.disabled = true;
+            btn.textContent = 'Restoring...';
+
+            try {
+                const response = await fetch(`${API_BASE}/config/restore`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(restoreData)
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || 'Restore failed');
+                }
+
+                const result = await response.json();
+                closeRestoreModal();
+                alert(`Configuration restored: ${result.gateway_count} channels from ${result.source_hostname}`);
+                await loadGateways();
+            } catch (e) {
+                alert('Restore failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Restore';
+            }
+        }
+
+        async function revertConfig() {
+            document.getElementById('config-menu').classList.remove('show');
+
+            if (!confirm('Revert to the previous configuration? This will stop all running channels.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/config/revert`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || 'Revert failed');
+                }
+
+                const result = await response.json();
+                alert(`Configuration reverted: ${result.gateway_count} channels`);
+                await loadGateways();
+            } catch (e) {
+                alert('Revert failed: ' + e.message);
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -1138,6 +1395,8 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeDeleteModal();
+                closeRestoreModal();
+                document.getElementById('config-menu')?.classList.remove('show');
             }
         });
     </script>

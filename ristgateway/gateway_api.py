@@ -1652,6 +1652,166 @@ def system_metrics():
     }
 
 # =============================================================================
+# Config Backup/Restore Endpoints
+# =============================================================================
+
+BACKUP_FILE = CONFIG_FILE + '.bak'
+
+@app.get("/api/config/backup", dependencies=[Depends(auth_required)])
+def download_config_backup():
+    """Download current configuration as JSON"""
+    config = load_config()
+
+    # Add metadata
+    backup_data = {
+        'version': '1.0',
+        'timestamp': datetime.now().isoformat(),
+        'hostname': os.uname().nodename,
+        'gateways': config.get('gateways', {}),
+        'settings': config.get('settings', {})
+    }
+
+    # Create response with download headers
+    content = json.dumps(backup_data, indent=2)
+    filename = f"ristgateway_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+@app.get("/api/config/has-backup", dependencies=[Depends(auth_required)])
+def check_backup_exists():
+    """Check if a .bak file exists for revert"""
+    exists = os.path.exists(BACKUP_FILE)
+    backup_time = None
+    if exists:
+        try:
+            backup_time = datetime.fromtimestamp(os.path.getmtime(BACKUP_FILE)).isoformat()
+        except:
+            pass
+    return {"has_backup": exists, "backup_time": backup_time}
+
+@app.post("/api/config/restore", dependencies=[Depends(auth_required)])
+async def restore_config_backup(request: Request):
+    """Restore configuration from uploaded JSON backup"""
+    try:
+        backup_data = await request.json()
+
+        # Validate backup format
+        if 'gateways' not in backup_data:
+            raise HTTPException(status_code=400, detail="Invalid backup: missing gateways")
+
+        # Stop all running gateways first
+        config = load_config()
+        for gw_id in config.get('gateways', {}):
+            try:
+                stop_gateway(gw_id)
+            except:
+                pass
+
+        # Save current config as .bak for revert
+        if os.path.exists(CONFIG_FILE):
+            import shutil
+            shutil.copy2(CONFIG_FILE, BACKUP_FILE)
+
+        # Build new config
+        new_config = {
+            'gateways': backup_data.get('gateways', {}),
+            'settings': backup_data.get('settings', config.get('settings', {}))
+        }
+
+        # Preserve password hash from current config
+        if 'password_hash' in config:
+            new_config['password_hash'] = config['password_hash']
+
+        # Save new config
+        save_config(new_config)
+
+        # Recreate systemd services for all gateways
+        for gw_id, gw in new_config.get('gateways', {}).items():
+            write_systemd_service(gw_id, gw)
+
+        # Start enabled gateways
+        for gw_id, gw in new_config.get('gateways', {}).items():
+            if gw.get('enabled', True):
+                try:
+                    start_gateway(gw_id, gw)
+                except:
+                    pass
+
+        logger.info(f"Config restored from backup with {len(new_config.get('gateways', {}))} gateways")
+
+        return {
+            "success": True,
+            "message": "Configuration restored",
+            "gateway_count": len(new_config.get('gateways', {})),
+            "source_hostname": backup_data.get('hostname', 'unknown')
+        }
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format")
+    except Exception as e:
+        logger.error(f"Config restore failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/config/revert", dependencies=[Depends(auth_required)])
+def revert_to_backup():
+    """Revert to the previous configuration (.bak file)"""
+    if not os.path.exists(BACKUP_FILE):
+        raise HTTPException(status_code=404, detail="No backup file found")
+
+    try:
+        # Stop all running gateways
+        config = load_config()
+        for gw_id in config.get('gateways', {}):
+            try:
+                stop_gateway(gw_id)
+            except:
+                pass
+
+        # Load backup
+        with open(BACKUP_FILE, 'r') as f:
+            backup_config = yaml.safe_load(f) or {}
+
+        # Preserve password hash
+        if 'password_hash' in config:
+            backup_config['password_hash'] = config['password_hash']
+
+        # Save as current config
+        save_config(backup_config)
+
+        # Remove the .bak file
+        os.remove(BACKUP_FILE)
+
+        # Recreate systemd services
+        for gw_id, gw in backup_config.get('gateways', {}).items():
+            write_systemd_service(gw_id, gw)
+
+        # Start enabled gateways
+        for gw_id, gw in backup_config.get('gateways', {}).items():
+            if gw.get('enabled', True):
+                try:
+                    start_gateway(gw_id, gw)
+                except:
+                    pass
+
+        logger.info(f"Config reverted with {len(backup_config.get('gateways', {}))} gateways")
+
+        return {
+            "success": True,
+            "message": "Configuration reverted",
+            "gateway_count": len(backup_config.get('gateways', {}))
+        }
+
+    except Exception as e:
+        logger.error(f"Config revert failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
 # Gateway Stats Endpoints
 # =============================================================================
 
