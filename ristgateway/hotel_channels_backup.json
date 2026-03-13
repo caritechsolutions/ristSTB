@@ -1,0 +1,492 @@
+{
+  "hostname": "hotel-gateway",
+  "timestamp": "2026-03-13T00:00:00Z",
+  "gateways": {
+    "channel1": {
+      "name": "bbcw264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60606", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:4600", "buffer": 1000, "profile": 1}]
+    },
+    "channel2": {
+      "name": "cnnus264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60601", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:4602", "buffer": 1000, "profile": 1}]
+    },
+    "channel3": {
+      "name": "CBCTV8",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60674", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:4604", "buffer": 1000, "profile": 1}]
+    },
+    "channel4": {
+      "name": "bet264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.171:61616", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:61616", "buffer": 1000, "profile": 1}]
+    },
+    "channel5": {
+      "name": "cbs264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60695", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59600", "buffer": 1000, "profile": 1}]
+    },
+    "channel6": {
+      "name": "msnbc264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60700", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59602", "buffer": 1000, "profile": 1}]
+    },
+    "channel7": {
+      "name": "espn2264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60704", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59603", "buffer": 1000, "profile": 1}]
+    },
+    "channel8": {
+      "name": "pbs264hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60702", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59604", "buffer": 1000, "profile": 1}]
+    },
+    "channel9": {
+      "name": "abc264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60701", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59605", "buffer": 1000, "profile": 1}]
+    },
+    "channel10": {
+      "name": "tcm264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60607", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59607", "buffer": 1000, "profile": 1}]
+    },
+    "channel11": {
+      "name": "discoveryi264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60656", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59608", "buffer": 1000, "profile": 1}]
+    },
+    "channel12": {
+      "name": "foxnews264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60657", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59609", "buffer": 1000, "profile": 1}]
+    },
+    "channel13": {
+      "name": "usa264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60658", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59610", "buffer": 1000, "profile": 1}]
+    },
+    "channel14": {
+      "name": "tntseries264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60659", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59611", "buffer": 1000, "profile": 1}]
+    },
+    "channel15": {
+      "name": "espncar264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60655", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59612", "buffer": 1000, "profile": 1}]
+    },
+    "channel16": {
+      "name": "tnt264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60660", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59613", "buffer": 1000, "profile": 1}]
+    },
+    "channel17": {
+      "name": "nbc264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60661", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59614", "buffer": 1000, "profile": 1}]
+    },
+    "channel18": {
+      "name": "lifetime264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60662", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59617", "buffer": 1000, "profile": 1}]
+    },
+    "channel19": {
+      "name": "ae264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60663", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59618", "buffer": 1000, "profile": 1}]
+    },
+    "channel20": {
+      "name": "ae-lat264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60664", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59619", "buffer": 1000, "profile": 1}]
+    },
+    "channel21": {
+      "name": "aljazeera264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60665", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59620", "buffer": 1000, "profile": 1}]
+    },
+    "channel22": {
+      "name": "amc264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60666", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59621", "buffer": 1000, "profile": 1}]
+    },
+    "channel23": {
+      "name": "animp264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60667", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59622", "buffer": 1000, "profile": 1}]
+    },
+    "channel24": {
+      "name": "cinemax264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60668", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59623", "buffer": 1000, "profile": 1}]
+    },
+    "channel25": {
+      "name": "discovhome264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60669", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59624", "buffer": 1000, "profile": 1}]
+    },
+    "channel26": {
+      "name": "discovsci264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60670", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59625", "buffer": 1000, "profile": 1}]
+    },
+    "channel27": {
+      "name": "discovtur264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60671", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59626", "buffer": 1000, "profile": 1}]
+    },
+    "channel28": {
+      "name": "foxsoc264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60672", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59627", "buffer": 1000, "profile": 1}]
+    },
+    "channel29": {
+      "name": "foxs2264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60673", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59628", "buffer": 1000, "profile": 1}]
+    },
+    "channel30": {
+      "name": "hbo264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60675", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59629", "buffer": 1000, "profile": 1}]
+    },
+    "channel31": {
+      "name": "hbo2264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60676", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59630", "buffer": 1000, "profile": 1}]
+    },
+    "channel32": {
+      "name": "hboext264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60677", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59631", "buffer": 1000, "profile": 1}]
+    },
+    "channel33": {
+      "name": "hbof264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60678", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59632", "buffer": 1000, "profile": 1}]
+    },
+    "channel34": {
+      "name": "hbomun264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60679", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59633", "buffer": 1000, "profile": 1}]
+    },
+    "channel35": {
+      "name": "hbop264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60680", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59634", "buffer": 1000, "profile": 1}]
+    },
+    "channel36": {
+      "name": "hbos264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60681", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59635", "buffer": 1000, "profile": 1}]
+    },
+    "channel37": {
+      "name": "hgtv264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60682", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59636", "buffer": 1000, "profile": 1}]
+    },
+    "channel38": {
+      "name": "history264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60683", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59637", "buffer": 1000, "profile": 1}]
+    },
+    "channel39": {
+      "name": "nick264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60684", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59638", "buffer": 1000, "profile": 1}]
+    },
+    "channel40": {
+      "name": "paramount264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60685", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59639", "buffer": 1000, "profile": 1}]
+    },
+    "channel41": {
+      "name": "sm1264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60686", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59640", "buffer": 1000, "profile": 1}]
+    },
+    "channel42": {
+      "name": "sm2264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60687", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59641", "buffer": 1000, "profile": 1}]
+    },
+    "channel43": {
+      "name": "lifemnhotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60688", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59642", "buffer": 1000, "profile": 1}]
+    },
+    "channel44": {
+      "name": "natgeo264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60689", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59643", "buffer": 1000, "profile": 1}]
+    },
+    "channel45": {
+      "name": "vh1",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60690", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59644", "buffer": 1000, "profile": 1}]
+    },
+    "channel46": {
+      "name": "rush1",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60691", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59645", "buffer": 1000, "profile": 1}]
+    },
+    "channel47": {
+      "name": "rush2",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60692", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59646", "buffer": 1000, "profile": 1}]
+    },
+    "channel48": {
+      "name": "dischd264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60693", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59647", "buffer": 1000, "profile": 1}]
+    },
+    "channel49": {
+      "name": "travel264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60694", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59648", "buffer": 1000, "profile": 1}]
+    },
+    "channel50": {
+      "name": "tv5",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60697", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59649", "buffer": 1000, "profile": 1}]
+    },
+    "channel51": {
+      "name": "dw",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60698", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59650", "buffer": 1000, "profile": 1}]
+    },
+    "channel52": {
+      "name": "rai",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60699", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59651", "buffer": 1000, "profile": 1}]
+    },
+    "channel53": {
+      "name": "ae",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59653", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59653", "buffer": 1000, "profile": 1}]
+    },
+    "channel54": {
+      "name": "ae-lat",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59654", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59654", "buffer": 1000, "profile": 1}]
+    },
+    "channel55": {
+      "name": "amc",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59655", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59655", "buffer": 1000, "profile": 1}]
+    },
+    "channel56": {
+      "name": "animp",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59656", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59656", "buffer": 1000, "profile": 1}]
+    },
+    "channel57": {
+      "name": "bet",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59657", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59657", "buffer": 1000, "profile": 1}]
+    },
+    "channel58": {
+      "name": "cinemax",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59658", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59658", "buffer": 1000, "profile": 1}]
+    },
+    "channel59": {
+      "name": "usa",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59659", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59659", "buffer": 1000, "profile": 1}]
+    },
+    "channel60": {
+      "name": "foxsoc",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59660", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59660", "buffer": 1000, "profile": 1}]
+    },
+    "channel61": {
+      "name": "espn2",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59661", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59661", "buffer": 1000, "profile": 1}]
+    },
+    "channel62": {
+      "name": "foxs2",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59662", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59662", "buffer": 1000, "profile": 1}]
+    },
+    "channel63": {
+      "name": "hbo2",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59663", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59663", "buffer": 1000, "profile": 1}]
+    },
+    "channel64": {
+      "name": "hboext",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59664", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59664", "buffer": 1000, "profile": 1}]
+    },
+    "channel65": {
+      "name": "hbof",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59665", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59665", "buffer": 1000, "profile": 1}]
+    },
+    "channel66": {
+      "name": "hbomun",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59666", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59666", "buffer": 1000, "profile": 1}]
+    },
+    "channel67": {
+      "name": "hbop",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59667", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59667", "buffer": 1000, "profile": 1}]
+    },
+    "channel68": {
+      "name": "hbos",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59668", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59668", "buffer": 1000, "profile": 1}]
+    },
+    "channel69": {
+      "name": "hgtv",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59669", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59669", "buffer": 1000, "profile": 1}]
+    },
+    "channel70": {
+      "name": "history",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59670", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59670", "buffer": 1000, "profile": 1}]
+    },
+    "channel71": {
+      "name": "travel",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59671", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59671", "buffer": 1000, "profile": 1}]
+    },
+    "channel72": {
+      "name": "paramount",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59672", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59672", "buffer": 1000, "profile": 1}]
+    },
+    "channel73": {
+      "name": "sm2",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59673", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59673", "buffer": 1000, "profile": 1}]
+    },
+    "channel74": {
+      "name": "tcm",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59674", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59674", "buffer": 1000, "profile": 1}]
+    },
+    "channel75": {
+      "name": "tntseries",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59675", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59675", "buffer": 1000, "profile": 1}]
+    },
+    "channel76": {
+      "name": "cartoon264_hotel",
+      "enabled": false,
+      "inputs": [{"url": "rist://104.200.103.174:60703", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59676", "buffer": 1000, "profile": 1}]
+    },
+    "channel77": {
+      "name": "disney_test",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.242:59600", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:49600", "buffer": 1000, "profile": 1}]
+    },
+    "channel78": {
+      "name": "abc",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59679", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59678", "buffer": 1000, "profile": 1}]
+    },
+    "channel79": {
+      "name": "espncar",
+      "enabled": false,
+      "inputs": [{"url": "rist://64.119.195.41:59681", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59681", "buffer": 1000, "profile": 1}]
+    },
+    "channel80": {
+      "name": "ESPN_Belize",
+      "enabled": false,
+      "inputs": [{"url": "rist://170.254.18.2:49506", "buffer": 1000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59685", "buffer": 1000, "profile": 1}]
+    },
+    "channel81": {
+      "name": "ESPN2_Belize",
+      "enabled": false,
+      "inputs": [{"url": "rist://170.254.18.2:49507", "buffer": 4000, "profile": 1}],
+      "outputs": [{"url": "rist://@108.181.88.213:59686", "buffer": 4000, "profile": 1}]
+    }
+  }
+}
