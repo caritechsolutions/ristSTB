@@ -117,7 +117,8 @@ def parse_rist_json_stats(text: str) -> Dict:
             'max_iat': 0
         },
         'peer_details': [],
-        'sender': {},
+        'sender': {},  # Keep for backwards compat - will be first/aggregate sender
+        'senders': [],  # All connected output peers
         'timestamp': datetime.now().isoformat()
     }
 
@@ -180,14 +181,14 @@ def parse_rist_json_stats(text: str) -> Dict:
                                 for p in peers
                             ]
 
-                # Parse sender-stats
+                # Parse sender-stats (one per connected output peer)
                 elif 'sender-stats' in data:
                     tx = data['sender-stats']
                     if 'peer' in tx:
                         peer = tx['peer']
                         stats = peer.get('stats', {})
 
-                        metrics['sender'] = {
+                        sender_info = {
                             'cname': peer.get('cname', ''),
                             'quality': stats.get('quality', 0),
                             'sent': stats.get('sent', 0),
@@ -196,8 +197,17 @@ def parse_rist_json_stats(text: str) -> Dict:
                             'retry_bandwidth': stats.get('retry_bandwidth', 0) / 1_000_000,
                             'rtt': stats.get('rtt', 0)
                         }
-                        metrics['retry_bandwidth'] = stats.get('retry_bandwidth', 0) / 1_000_000
-                        metrics['packets']['sent'] = stats.get('sent', 0)
+
+                        # Add to senders list
+                        metrics['senders'].append(sender_info)
+
+                        # Keep first sender for backwards compat
+                        if not metrics['sender']:
+                            metrics['sender'] = sender_info
+
+                        # Accumulate totals
+                        metrics['retry_bandwidth'] += stats.get('retry_bandwidth', 0) / 1_000_000
+                        metrics['packets']['sent'] += stats.get('sent', 0)
 
     except Exception as e:
         logger.error(f"Error parsing RIST JSON stats: {e}")
@@ -893,6 +903,7 @@ def _check_cgroup(gateway_id: str) -> dict:
         'status': 'stopped',
         'pid': None,
         'uptime': None,
+        'uptime_seconds': None,
         'cpu_percent': None,
         'memory_mb': None
     }
@@ -915,6 +926,34 @@ def _check_cgroup(gateway_id: str) -> dict:
                 pids = [int(line.strip()) for line in f if line.strip().isdigit()]
                 if pids:
                     result['pid'] = pids[0]
+                    # Calculate uptime from process start time
+                    try:
+                        stat_file = f"/proc/{pids[0]}/stat"
+                        if os.path.exists(stat_file):
+                            with open(stat_file, 'r') as sf:
+                                stat_content = sf.read()
+                                # Field 22 is starttime (after closing paren of comm)
+                                parts = stat_content.split(') ')
+                                if len(parts) >= 2:
+                                    fields = parts[1].split()
+                                    if len(fields) >= 20:
+                                        starttime_ticks = int(fields[19])  # field 22, 0-indexed after split
+                                        # Get system boot time and clock ticks per second
+                                        with open('/proc/uptime', 'r') as uf:
+                                            system_uptime = float(uf.read().split()[0])
+                                        clk_tck = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+                                        process_start_seconds = starttime_ticks / clk_tck
+                                        process_uptime = system_uptime - process_start_seconds
+                                        result['uptime_seconds'] = int(process_uptime)
+                                        # Format uptime string
+                                        hours = int(process_uptime // 3600)
+                                        minutes = int((process_uptime % 3600) // 60)
+                                        if hours > 0:
+                                            result['uptime'] = f"{hours}h {minutes}m"
+                                        else:
+                                            result['uptime'] = f"{minutes}m"
+                    except:
+                        pass
     except:
         pass
 
@@ -963,16 +1002,14 @@ def _check_cgroup(gateway_id: str) -> dict:
 
 
 def _read_stats_file(service_name: str) -> str:
-    """Read the last few lines from the stats file to get both receiver and sender stats"""
+    """Read all lines from the stats file to get receiver and all sender stats"""
     # Use /dev/shm (shared memory / tmpfs) - RAM backed, no disk I/O
     stats_file = f"/dev/shm/ristgateway-stats/{service_name}.txt"
     try:
         if os.path.exists(stats_file):
             with open(stats_file, 'r') as f:
-                lines = f.readlines()
-                if lines:
-                    # Return last 5 lines to ensure we get both receiver and sender stats
-                    return '\n'.join(line.strip() for line in lines[-5:])
+                # Read all lines - file is kept small by stats collector (20 lines)
+                return f.read()
     except Exception as e:
         logger.error(f"Error reading stats file: {e}")
     return ''
@@ -1585,6 +1622,7 @@ def get_gateway_metrics(gateway_id: str):
         "stats": stats,
         "cpu_percent": status.get('cpu_percent'),
         "memory_mb": status.get('memory_mb'),
+        "uptime_seconds": status.get('uptime_seconds'),
         "timestamp": datetime.now().isoformat()
     }
 

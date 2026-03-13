@@ -791,7 +791,6 @@
                         <div class="peer-metrics">
                             <span>RTT: <span id="peer-rtt-${i}">-</span></span>
                             <span>BW: <span id="peer-bw-${i}">-</span></span>
-                            <span>Quality: <span id="peer-quality-${i}">-</span></span>
                         </div>
                     </div>
                 `).join('');
@@ -799,19 +798,28 @@
                 inputList.innerHTML = '<div class="peer-row" style="justify-content: center; color: var(--text-secondary);">No input peers configured</div>';
             }
 
+            // Output peers will be updated from senders stats, not config
+            updateOutputPeersDisplay([]);
+        }
+
+        function updateOutputPeersDisplay(senders) {
             const outputList = document.getElementById('output-peers');
-            if (outputs.length > 0) {
-                outputList.innerHTML = outputs.map((p, i) => `
-                    <div class="peer-row">
-                        <div class="peer-dot"></div>
-                        <div class="peer-url">${escapeHtml(p.url)}</div>
-                        <div class="peer-metrics">
-                            <span>CNAME: <span id="out-cname-${i}">-</span></span>
-                            <span>Quality: <span id="out-quality-${i}">-</span></span>
-                            <span>RTT: <span id="out-rtt-${i}">-</span></span>
+            if (senders && senders.length > 0) {
+                outputList.innerHTML = senders.map((s, i) => {
+                    const qualityColor = s.quality >= 95 ? 'var(--accent-green)' :
+                                        s.quality >= 80 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+                    return `
+                        <div class="peer-row">
+                            <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 6px ${qualityColor};"></div>
+                            <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
+                            <div class="peer-metrics">
+                                <span>Quality: <span style="color: ${qualityColor}">${s.quality}%</span></span>
+                                <span>RTT: <span>${(s.rtt || 0).toFixed(0)}ms</span></span>
+                                <span>BW: <span>${(s.bandwidth || 0).toFixed(2)} Mbps</span></span>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
             } else {
                 outputList.innerHTML = '<div class="peer-row" style="justify-content: center; color: var(--text-secondary);">No output peers connected</div>';
             }
@@ -855,16 +863,18 @@
             document.getElementById('input-rtt').textContent = (stats.rtt || 0).toFixed(0) + ' ms';
             document.getElementById('input-quality').textContent = quality.toFixed(0) + '%';
 
-            // Per-peer stats
+            // Per-input-peer stats
             const peerDetails = stats.peer_details || [];
             peerDetails.forEach((peer, i) => {
                 const rttEl = document.getElementById(`peer-rtt-${i}`);
                 const bwEl = document.getElementById(`peer-bw-${i}`);
-                const qEl = document.getElementById(`peer-quality-${i}`);
                 if (rttEl) rttEl.textContent = (peer.rtt || 0).toFixed(0) + 'ms';
                 if (bwEl) bwEl.textContent = (peer.bitrate || 0).toFixed(2) + ' Mbps';
-                if (qEl) qEl.textContent = (peer.quality || 100) + '%';
             });
+
+            // Update output peers from senders array
+            const senders = stats.senders || [];
+            updateOutputPeersDisplay(senders);
 
             // Packets
             const packets = stats.packets || {};
@@ -874,12 +884,26 @@
             document.getElementById('pkt-missing').textContent = formatNumber(packets.missing || 0);
             document.getElementById('pkt-reordered').textContent = formatNumber(packets.reordered || 0);
 
-            // Output section
-            const sender = stats.sender || {};
-            const outputBw = sender.bandwidth || 0;
+            // Output section - aggregate from all senders
+            const sendersList = stats.senders || [];
+            let totalOutputBw = 0;
+            let totalSent = 0;
+            let totalRetx = 0;
+            sendersList.forEach(s => {
+                totalOutputBw += s.bandwidth || 0;
+                totalSent += s.sent || 0;
+                totalRetx += s.retransmitted || 0;
+            });
+            // Fallback to single sender if senders array empty
+            if (sendersList.length === 0 && stats.sender) {
+                totalOutputBw = stats.sender.bandwidth || 0;
+                totalSent = stats.sender.sent || 0;
+                totalRetx = stats.sender.retransmitted || 0;
+            }
+            const outputBw = totalOutputBw;
             document.getElementById('output-bw').textContent = outputBw.toFixed(2) + ' Mbps';
-            document.getElementById('output-sent').textContent = formatNumber(sender.sent || 0);
-            document.getElementById('output-retx').textContent = formatNumber(sender.retransmitted || 0);
+            document.getElementById('output-sent').textContent = formatNumber(totalSent);
+            document.getElementById('output-retx').textContent = formatNumber(totalRetx);
 
             // Update charts
             document.getElementById('chart-input-bw').textContent = inputBw.toFixed(2) + ' Mbps';
