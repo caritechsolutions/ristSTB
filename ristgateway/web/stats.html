@@ -808,7 +808,7 @@
         let pollInterval = null;
         let inputBwHistory = [];
         let outputBwHistory = [];
-        const HISTORY_LENGTH = 60;
+        const HISTORY_LENGTH = 120;  // 2 minutes at 1 second intervals
 
         async function checkAuth() {
             try {
@@ -1095,10 +1095,13 @@
         }
 
         function updateCharts() {
-            inputBwChart.data.datasets[0].data = inputBwHistory;
+            // Update labels to match data length
+            inputBwChart.data.labels = Array(inputBwHistory.length).fill('');
+            inputBwChart.data.datasets[0].data = [...inputBwHistory];
             inputBwChart.update('none');
 
-            outputBwChart.data.datasets[0].data = outputBwHistory;
+            outputBwChart.data.labels = Array(outputBwHistory.length).fill('');
+            outputBwChart.data.datasets[0].data = [...outputBwHistory];
             outputBwChart.update('none');
         }
 
