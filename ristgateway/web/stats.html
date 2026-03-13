@@ -791,10 +791,6 @@
                             <div class="video-stat-label">Framerate</div>
                             <div class="video-stat-value" id="vid-fps">-</div>
                         </div>
-                        <div>
-                            <div class="video-stat-label">Bitrate</div>
-                            <div class="video-stat-value" id="vid-bitrate">-</div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1144,7 +1140,6 @@
             document.getElementById('vid-resolution').textContent = '-';
             document.getElementById('vid-codec').textContent = '-';
             document.getElementById('vid-fps').textContent = '-';
-            document.getElementById('vid-bitrate').textContent = '-';
         }
 
         async function startPreview() {
@@ -1257,8 +1252,6 @@
                             info.video.codec ? `${info.video.codec.toUpperCase()} / ${(info.audio.codec || 'aac').toUpperCase()}` : '-';
                         document.getElementById('vid-fps').textContent =
                             info.video.fps ? `${info.video.fps.toFixed(2)} fps` : '-';
-                        document.getElementById('vid-bitrate').textContent =
-                            info.bitrate ? `${(info.bitrate / 1000000).toFixed(2)} Mbps` : '-';
                     }
                 }
             } catch (error) {
