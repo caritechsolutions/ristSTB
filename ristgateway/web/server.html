@@ -809,6 +809,8 @@
             const interfacesDiv = document.getElementById('interfaces');
             const entries = Object.entries(interfaces);
 
+            console.log('updateInterfaces called, entries:', entries.length, 'interfaceHistory keys:', Object.keys(interfaceHistory));
+
             if (entries.length === 0) {
                 interfacesDiv.innerHTML = '<p style="color: var(--text-secondary)">No network interfaces found</p>';
                 return;
@@ -913,8 +915,10 @@
                 }).join('');
 
                 // Create charts for each interface and populate with historical data
+                console.log('Creating charts for interfaces, needsRebuild=true');
                 for (const [name] of entries) {
                     const canvasId = `chart-${name}`;
+                    console.log(`Creating chart for ${name}, canvas exists:`, !!document.getElementById(canvasId));
                     interfaceCharts[name] = createInterfaceChart(canvasId);
 
                     // If we have historical data, populate the chart with timestamps
