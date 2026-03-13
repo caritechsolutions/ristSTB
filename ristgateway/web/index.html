@@ -912,12 +912,11 @@
             return { class: 'critical', text: q + '%', value: q };
         }
 
-        // Format bandwidth for display
-        function formatBandwidth(bps) {
-            if (!bps || bps <= 0) return '-';
-            const mbps = bps / 1000000;
+        // Format bandwidth for display (input is already in Mbps)
+        function formatBandwidth(mbps) {
+            if (!mbps || mbps <= 0) return '-';
             if (mbps >= 1) return mbps.toFixed(1) + ' Mbps';
-            const kbps = bps / 1000;
+            const kbps = mbps * 1000;
             return kbps.toFixed(0) + ' Kbps';
         }
 
@@ -925,7 +924,7 @@
         function getBandwidthInfo(id, gw) {
             if (!gw.running) return { text: '-', active: false };
             const stats = gatewayStats[id];
-            if (!stats || !stats.bandwidth) return { text: '-', active: false };
+            if (!stats || stats.bandwidth === undefined) return { text: '-', active: false };
             return { text: formatBandwidth(stats.bandwidth), active: stats.bandwidth > 0 };
         }
 
