@@ -655,6 +655,11 @@
             return 'red';
         }
 
+        function formatTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        }
+
         function createInterfaceChart(canvasId) {
             const ctx = document.getElementById(canvasId);
             if (!ctx) return null;
@@ -664,7 +669,17 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { display: false },
+                    x: {
+                        display: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: {
+                            color: '#a0a0b0',
+                            font: { size: 9 },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 6
+                        }
+                    },
                     y: {
                         beginAtZero: true,
                         grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -687,7 +702,7 @@
             return new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: Array(HISTORY_LENGTH).fill(''),
+                    labels: [],
                     datasets: [
                         {
                             label: 'RX',
@@ -902,10 +917,12 @@
                     const canvasId = `chart-${name}`;
                     interfaceCharts[name] = createInterfaceChart(canvasId);
 
-                    // If we have historical data, populate the chart
+                    // If we have historical data, populate the chart with timestamps
                     if (interfaceHistory[name] && interfaceCharts[name]) {
-                        interfaceCharts[name].data.datasets[0].data = [...interfaceHistory[name].rx];
-                        interfaceCharts[name].data.datasets[1].data = [...interfaceHistory[name].tx];
+                        const hist = interfaceHistory[name];
+                        interfaceCharts[name].data.labels = (hist.timestamps || []).map(t => formatTime(t));
+                        interfaceCharts[name].data.datasets[0].data = [...hist.rx];
+                        interfaceCharts[name].data.datasets[1].data = [...hist.tx];
                         interfaceCharts[name].update('none');
                     }
                 }
@@ -955,23 +972,25 @@
 
                     // Update history and chart
                     if (!interfaceHistory[name]) {
-                        interfaceHistory[name] = { rx: [], tx: [] };
+                        interfaceHistory[name] = { timestamps: [], rx: [], tx: [] };
                     }
 
-                    // Push new data points
+                    // Push new data points with current timestamp
+                    const now = Date.now() / 1000;
+                    interfaceHistory[name].timestamps.push(now);
                     interfaceHistory[name].rx.push(rxRate);
                     interfaceHistory[name].tx.push(txRate);
 
                     // Trim to max length
-                    if (interfaceHistory[name].rx.length > HISTORY_LENGTH) {
+                    while (interfaceHistory[name].timestamps.length > HISTORY_LENGTH) {
+                        interfaceHistory[name].timestamps.shift();
                         interfaceHistory[name].rx.shift();
-                    }
-                    if (interfaceHistory[name].tx.length > HISTORY_LENGTH) {
                         interfaceHistory[name].tx.shift();
                     }
 
-                    // Update chart
+                    // Update chart with timestamps as labels
                     if (interfaceCharts[name]) {
+                        interfaceCharts[name].data.labels = interfaceHistory[name].timestamps.map(t => formatTime(t));
                         interfaceCharts[name].data.datasets[0].data = interfaceHistory[name].rx;
                         interfaceCharts[name].data.datasets[1].data = interfaceHistory[name].tx;
                         interfaceCharts[name].update('none');
@@ -993,11 +1012,12 @@
                 // Populate interfaceHistory from backend data
                 for (const [iface, points] of Object.entries(data)) {
                     if (!interfaceHistory[iface]) {
-                        interfaceHistory[iface] = { rx: [], tx: [] };
+                        interfaceHistory[iface] = { timestamps: [], rx: [], tx: [] };
                     }
 
                     // Take last HISTORY_LENGTH points
                     const recentPoints = points.slice(-HISTORY_LENGTH);
+                    interfaceHistory[iface].timestamps = recentPoints.map(p => p.timestamp || 0);
                     interfaceHistory[iface].rx = recentPoints.map(p => p.rx_rate || 0);
                     interfaceHistory[iface].tx = recentPoints.map(p => p.tx_rate || 0);
                 }
