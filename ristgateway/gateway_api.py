@@ -187,9 +187,10 @@ def parse_rist_json_stats(text: str) -> Dict:
                     if 'peer' in tx:
                         peer = tx['peer']
                         stats = peer.get('stats', {})
+                        cname = peer.get('cname', '')
 
                         sender_info = {
-                            'cname': peer.get('cname', ''),
+                            'cname': cname,
                             'quality': stats.get('quality', 0),
                             'sent': stats.get('sent', 0),
                             'retransmitted': stats.get('retransmitted', 0),
@@ -198,16 +199,16 @@ def parse_rist_json_stats(text: str) -> Dict:
                             'rtt': stats.get('rtt', 0)
                         }
 
-                        # Add to senders list
-                        metrics['senders'].append(sender_info)
+                        # Deduplicate by CNAME - keep latest stats for each sender
+                        existing_idx = next((i for i, s in enumerate(metrics['senders']) if s['cname'] == cname), None)
+                        if existing_idx is not None:
+                            metrics['senders'][existing_idx] = sender_info
+                        else:
+                            metrics['senders'].append(sender_info)
 
                         # Keep first sender for backwards compat
                         if not metrics['sender']:
                             metrics['sender'] = sender_info
-
-                        # Accumulate totals
-                        metrics['retry_bandwidth'] += stats.get('retry_bandwidth', 0) / 1_000_000
-                        metrics['packets']['sent'] += stats.get('sent', 0)
 
     except Exception as e:
         logger.error(f"Error parsing RIST JSON stats: {e}")
