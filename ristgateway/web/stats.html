@@ -255,14 +255,17 @@
         .peer-list { display: flex; flex-direction: column; gap: 8px; }
 
         .peer-row {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            align-items: center;
-            gap: 12px;
             padding: 12px 14px;
             background: var(--bg-secondary);
             border-radius: 8px;
             font-size: 12px;
+        }
+
+        .peer-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
         }
 
         .peer-dot {
@@ -275,6 +278,7 @@
         }
 
         .peer-info {
+            flex: 1;
             min-width: 0;
         }
 
@@ -295,19 +299,21 @@
         .peer-metrics {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px 16px;
-            color: var(--text-secondary);
+            gap: 4px 20px;
             font-size: 11px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
         }
 
         .peer-metric {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 4px;
+            white-space: nowrap;
         }
 
         .peer-metric-value { color: var(--text-primary); font-weight: 600; }
-        .peer-metric-label { font-size: 10px; text-transform: uppercase; color: var(--text-secondary); }
+        .peer-metric-label { color: var(--text-secondary); }
 
         .stats-grid {
             display: grid;
@@ -861,10 +867,12 @@
             if (inputs.length > 0) {
                 inputList.innerHTML = inputs.map((p, i) => `
                     <div class="peer-row" data-peer-index="${i}">
-                        <div class="peer-dot" id="peer-dot-${i}"></div>
-                        <div class="peer-info">
-                            <div class="peer-url">${escapeHtml(p.url)}</div>
-                            <div class="peer-id">Peer ID: <span id="peer-id-${i}">-</span></div>
+                        <div class="peer-header">
+                            <div class="peer-dot" id="peer-dot-${i}"></div>
+                            <div class="peer-info">
+                                <div class="peer-url">${escapeHtml(p.url)}</div>
+                                <div class="peer-id">Peer ID: <span id="peer-id-${i}">-</span></div>
+                            </div>
                         </div>
                         <div class="peer-metrics">
                             <div class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value" id="peer-rtt-${i}">-</span></div>
@@ -891,10 +899,12 @@
                                         s.quality >= 80 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
                     return `
                         <div class="peer-row">
-                            <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 6px ${qualityColor};"></div>
-                            <div class="peer-info">
-                                <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
-                                <div class="peer-id">ID: ${s.id} | Type: ${s.type || 'data'}</div>
+                            <div class="peer-header">
+                                <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 6px ${qualityColor};"></div>
+                                <div class="peer-info">
+                                    <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
+                                    <div class="peer-id">ID: ${s.id} | Type: ${s.type || 'data'}</div>
+                                </div>
                             </div>
                             <div class="peer-metrics">
                                 <div class="peer-metric"><span class="peer-metric-label">Quality:</span> <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span></div>
