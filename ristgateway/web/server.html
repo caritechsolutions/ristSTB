@@ -897,10 +897,17 @@
                     `;
                 }).join('');
 
-                // Create charts for each interface
+                // Create charts for each interface and populate with historical data
                 for (const [name] of entries) {
                     const canvasId = `chart-${name}`;
                     interfaceCharts[name] = createInterfaceChart(canvasId);
+
+                    // If we have historical data, populate the chart
+                    if (interfaceHistory[name] && interfaceCharts[name]) {
+                        interfaceCharts[name].data.datasets[0].data = [...interfaceHistory[name].rx];
+                        interfaceCharts[name].data.datasets[1].data = [...interfaceHistory[name].tx];
+                        interfaceCharts[name].update('none');
+                    }
                 }
             } else {
                 // Update values
@@ -973,6 +980,34 @@
             }
         }
 
+        async function loadHistoricalData() {
+            try {
+                // Load last 60 seconds of history (matches HISTORY_LENGTH)
+                const response = await fetch(`${API_BASE}/system/interface-history?minutes=1`, {
+                    credentials: 'include'
+                });
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                // Populate interfaceHistory from backend data
+                for (const [iface, points] of Object.entries(data)) {
+                    if (!interfaceHistory[iface]) {
+                        interfaceHistory[iface] = { rx: [], tx: [] };
+                    }
+
+                    // Take last HISTORY_LENGTH points
+                    const recentPoints = points.slice(-HISTORY_LENGTH);
+                    interfaceHistory[iface].rx = recentPoints.map(p => p.rx_rate || 0);
+                    interfaceHistory[iface].tx = recentPoints.map(p => p.tx_rate || 0);
+                }
+
+                console.log('Loaded historical data for interfaces:', Object.keys(data));
+            } catch (error) {
+                console.error('Failed to load historical data:', error);
+            }
+        }
+
         function startPolling() {
             loadStats();
             pollInterval = setInterval(loadStats, 1000);  // Poll every 1 second
@@ -987,6 +1022,7 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
+            await loadHistoricalData();  // Load history first
             startPolling();
         });
 
