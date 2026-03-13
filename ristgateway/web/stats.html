@@ -45,7 +45,7 @@
         }
 
         .header-content {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
@@ -115,7 +115,7 @@
         }
 
         .main-content {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 1.5rem;
         }
@@ -207,6 +207,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
 
         .section-title {
@@ -226,14 +228,15 @@
 
         .section-stats {
             display: flex;
-            gap: 2rem;
-            font-size: 13px;
+            gap: 1.5rem;
+            font-size: 12px;
+            flex-wrap: wrap;
         }
 
         .section-stat {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
         }
 
         .section-stat-label { color: var(--text-secondary); }
@@ -252,13 +255,14 @@
         .peer-list { display: flex; flex-direction: column; gap: 8px; }
 
         .peer-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
             align-items: center;
             gap: 12px;
-            padding: 10px 14px;
+            padding: 12px 14px;
             background: var(--bg-secondary);
             border-radius: 8px;
-            font-size: 13px;
+            font-size: 12px;
         }
 
         .peer-dot {
@@ -270,40 +274,66 @@
             flex-shrink: 0;
         }
 
+        .peer-info {
+            min-width: 0;
+        }
+
         .peer-url {
             font-family: monospace;
-            flex: 1;
-            min-width: 0;
+            font-size: 12px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .peer-metrics {
-            display: flex;
-            gap: 1.5rem;
+        .peer-id {
+            font-size: 10px;
             color: var(--text-secondary);
-            flex-shrink: 0;
+            margin-top: 2px;
         }
 
-        .peer-metric span { color: var(--text-primary); font-weight: 500; }
+        .peer-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 12px 20px;
+            color: var(--text-secondary);
+            font-size: 11px;
+        }
 
-        .packets-row {
+        .peer-metric {
             display: flex;
-            gap: 2rem;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .peer-metric-value { color: var(--text-primary); font-weight: 600; font-size: 12px; }
+        .peer-metric-label { font-size: 9px; text-transform: uppercase; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 12px;
             margin-top: 1rem;
             padding-top: 1rem;
             border-top: 1px solid var(--border-color);
-            font-size: 12px;
         }
 
-        .packet-stat { display: flex; align-items: center; gap: 6px; }
-        .packet-label { color: var(--text-secondary); }
-        .packet-value { font-weight: 600; }
-        .packet-value.green { color: var(--accent-green); }
-        .packet-value.blue { color: var(--accent-blue); }
-        .packet-value.red { color: var(--accent-red); }
-        .packet-value.orange { color: var(--accent-orange); }
+        .stat-item {
+            text-align: center;
+            padding: 8px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+        }
+
+        .stat-value { font-size: 16px; font-weight: 700; }
+        .stat-label { font-size: 9px; color: var(--text-secondary); text-transform: uppercase; margin-top: 2px; }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.cyan { color: var(--accent-cyan); }
+        .stat-value.purple { color: var(--accent-purple); }
 
         /* Charts Row */
         .charts-row {
@@ -489,11 +519,13 @@
         @media (max-width: 1024px) {
             .top-row { grid-template-columns: 1fr; }
             .charts-row { grid-template-columns: 1fr; }
+            .peer-row { grid-template-columns: auto 1fr; }
+            .peer-metrics { grid-column: 1 / -1; margin-top: 8px; }
         }
 
         @media (max-width: 640px) {
-            .section-stats { flex-wrap: wrap; gap: 1rem; }
-            .packets-row { flex-wrap: wrap; }
+            .section-stats { gap: 0.75rem; }
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
             .video-stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
@@ -567,7 +599,7 @@
                 </div>
                 <div class="section-stats">
                     <div class="section-stat">
-                        <span class="section-stat-label">Bandwidth:</span>
+                        <span class="section-stat-label">BW:</span>
                         <span class="section-stat-value" id="input-bw">0 Mbps</span>
                     </div>
                     <div class="section-stat">
@@ -575,8 +607,20 @@
                         <span class="section-stat-value" id="input-rtt">0 ms</span>
                     </div>
                     <div class="section-stat">
-                        <span class="section-stat-label">Quality:</span>
-                        <span class="section-stat-value" id="input-quality">0%</span>
+                        <span class="section-stat-label">Avg RTT:</span>
+                        <span class="section-stat-value" id="input-avg-rtt">0 ms</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Jitter:</span>
+                        <span class="section-stat-value" id="input-jitter">0 ms</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Buffer:</span>
+                        <span class="section-stat-value" id="input-buffer">0 ms</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Missing Q:</span>
+                        <span class="section-stat-value" id="input-missing-q">0</span>
                     </div>
                 </div>
             </div>
@@ -587,26 +631,54 @@
                         No input peers configured
                     </div>
                 </div>
-                <div class="packets-row">
-                    <div class="packet-stat">
-                        <span class="packet-label">Received:</span>
-                        <span class="packet-value green" id="pkt-received">0</span>
+                <div class="stats-grid" id="input-stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value green" id="pkt-received">0</div>
+                        <div class="stat-label">Received</div>
                     </div>
-                    <div class="packet-stat">
-                        <span class="packet-label">Recovered:</span>
-                        <span class="packet-value blue" id="pkt-recovered">0</span>
+                    <div class="stat-item">
+                        <div class="stat-value blue" id="pkt-recovered">0</div>
+                        <div class="stat-label">Recovered</div>
                     </div>
-                    <div class="packet-stat">
-                        <span class="packet-label">Lost:</span>
-                        <span class="packet-value red" id="pkt-lost">0</span>
+                    <div class="stat-item">
+                        <div class="stat-value red" id="pkt-lost">0</div>
+                        <div class="stat-label">Lost</div>
                     </div>
-                    <div class="packet-stat">
-                        <span class="packet-label">Missing:</span>
-                        <span class="packet-value orange" id="pkt-missing">0</span>
+                    <div class="stat-item">
+                        <div class="stat-value orange" id="pkt-missing">0</div>
+                        <div class="stat-label">Missing</div>
                     </div>
-                    <div class="packet-stat">
-                        <span class="packet-label">Reordered:</span>
-                        <span class="packet-value" id="pkt-reordered">0</span>
+                    <div class="stat-item">
+                        <div class="stat-value" id="pkt-reordered">0</div>
+                        <div class="stat-label">Reordered</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="pkt-duplicates">0</div>
+                        <div class="stat-label">Duplicates</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value orange" id="pkt-dropped-late">0</div>
+                        <div class="stat-label">Dropped Late</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value red" id="pkt-dropped-full">0</div>
+                        <div class="stat-label">Dropped Full</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value cyan" id="pkt-retries">0</div>
+                        <div class="stat-label">Retries Sent</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value blue" id="pkt-rec-1">0</div>
+                        <div class="stat-label">Rec 1 Retry</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value blue" id="pkt-rec-2">0</div>
+                        <div class="stat-label">Rec 2 Retry</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value blue" id="pkt-rec-3">0</div>
+                        <div class="stat-label">Rec 3+ Retry</div>
                     </div>
                 </div>
             </div>
@@ -623,7 +695,7 @@
                 </div>
                 <div class="section-stats">
                     <div class="section-stat">
-                        <span class="section-stat-label">Bandwidth:</span>
+                        <span class="section-stat-label">BW:</span>
                         <span class="section-stat-value" id="output-bw">0 Mbps</span>
                     </div>
                     <div class="section-stat">
@@ -631,8 +703,12 @@
                         <span class="section-stat-value" id="output-sent">0</span>
                     </div>
                     <div class="section-stat">
-                        <span class="section-stat-label">Retransmitted:</span>
+                        <span class="section-stat-label">Retx:</span>
                         <span class="section-stat-value" id="output-retx">0</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Retry BW:</span>
+                        <span class="section-stat-value" id="output-retry-bw">0 Mbps</span>
                     </div>
                 </div>
             </div>
@@ -775,22 +851,50 @@
                 document.getElementById('main-content').style.display = 'none';
             }
 
-            updatePeersDisplay();
+            updateInputPeersDisplay();
         }
 
-        function updatePeersDisplay() {
+        function updateInputPeersDisplay() {
             const inputs = gateway.inputs || [];
-            const outputs = gateway.outputs || [];
-
             const inputList = document.getElementById('input-peers');
+
             if (inputs.length > 0) {
                 inputList.innerHTML = inputs.map((p, i) => `
                     <div class="peer-row" data-peer-index="${i}">
-                        <div class="peer-dot"></div>
-                        <div class="peer-url">${escapeHtml(p.url)}</div>
+                        <div class="peer-dot" id="peer-dot-${i}"></div>
+                        <div class="peer-info">
+                            <div class="peer-url">${escapeHtml(p.url)}</div>
+                            <div class="peer-id">Peer ID: <span id="peer-id-${i}">-</span></div>
+                        </div>
                         <div class="peer-metrics">
-                            <span>RTT: <span id="peer-rtt-${i}">-</span></span>
-                            <span>BW: <span id="peer-bw-${i}">-</span></span>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-rtt-${i}">-</span>
+                                <span class="peer-metric-label">RTT</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-avg-rtt-${i}">-</span>
+                                <span class="peer-metric-label">Avg RTT</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-bw-${i}">-</span>
+                                <span class="peer-metric-label">Bitrate</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-avg-bw-${i}">-</span>
+                                <span class="peer-metric-label">Avg BW</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-rx-data-${i}">-</span>
+                                <span class="peer-metric-label">RX Data</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-rx-rtcp-${i}">-</span>
+                                <span class="peer-metric-label">RX RTCP</span>
+                            </div>
+                            <div class="peer-metric">
+                                <span class="peer-metric-value" id="peer-tx-rtcp-${i}">-</span>
+                                <span class="peer-metric-label">TX RTCP</span>
+                            </div>
                         </div>
                     </div>
                 `).join('');
@@ -798,7 +902,6 @@
                 inputList.innerHTML = '<div class="peer-row" style="justify-content: center; color: var(--text-secondary);">No input peers configured</div>';
             }
 
-            // Output peers will be updated from senders stats, not config
             updateOutputPeersDisplay([]);
         }
 
@@ -811,11 +914,47 @@
                     return `
                         <div class="peer-row">
                             <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 6px ${qualityColor};"></div>
-                            <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
+                            <div class="peer-info">
+                                <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
+                                <div class="peer-id">ID: ${s.id} | Type: ${s.type || 'data'}</div>
+                            </div>
                             <div class="peer-metrics">
-                                <span>Quality: <span style="color: ${qualityColor}">${s.quality}%</span></span>
-                                <span>RTT: <span>${(s.rtt || 0).toFixed(0)}ms</span></span>
-                                <span>BW: <span>${(s.bandwidth || 0).toFixed(2)} Mbps</span></span>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span>
+                                    <span class="peer-metric-label">Quality</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${(s.rtt || 0).toFixed(0)}ms</span>
+                                    <span class="peer-metric-label">RTT</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${(s.avg_rtt || 0).toFixed(0)}ms</span>
+                                    <span class="peer-metric-label">Avg RTT</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${(s.bandwidth || 0).toFixed(2)}</span>
+                                    <span class="peer-metric-label">BW Mbps</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${formatNumber(s.sent || 0)}</span>
+                                    <span class="peer-metric-label">Sent</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${formatNumber(s.received || 0)}</span>
+                                    <span class="peer-metric-label">ACKs</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value" style="color: ${s.retransmitted > 0 ? 'var(--accent-orange)' : ''}">${formatNumber(s.retransmitted || 0)}</span>
+                                    <span class="peer-metric-label">Retx</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${(s.retry_bandwidth || 0).toFixed(2)}</span>
+                                    <span class="peer-metric-label">Retry BW</span>
+                                </div>
+                                <div class="peer-metric">
+                                    <span class="peer-metric-value">${s.retry_buffer_size || 0}</span>
+                                    <span class="peer-metric-label">Retry Buf</span>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -857,53 +996,89 @@
             document.getElementById('sys-mem').textContent = data.memory_mb !== null ? data.memory_mb.toFixed(0) : '-';
             document.getElementById('sys-uptime').textContent = formatUptime(data.uptime_seconds);
 
-            // Input section
+            // Input section header
             const inputBw = stats.bandwidth || 0;
+            const timing = stats.timing || {};
+            const missingQ = stats.missing_queue || {};
+
             document.getElementById('input-bw').textContent = inputBw.toFixed(2) + ' Mbps';
             document.getElementById('input-rtt').textContent = (stats.rtt || 0).toFixed(0) + ' ms';
-            document.getElementById('input-quality').textContent = quality.toFixed(0) + '%';
+            document.getElementById('input-avg-rtt').textContent = (stats.avg_rtt || 0).toFixed(0) + ' ms';
+            document.getElementById('input-jitter').textContent = (timing.cur_iat || 0).toFixed(1) + ' ms';
+            document.getElementById('input-buffer').textContent = (timing.avg_buffer_time || 0) + ' ms';
+            document.getElementById('input-missing-q').textContent = missingQ.current || 0;
 
             // Per-input-peer stats
             const peerDetails = stats.peer_details || [];
             peerDetails.forEach((peer, i) => {
+                const idEl = document.getElementById(`peer-id-${i}`);
                 const rttEl = document.getElementById(`peer-rtt-${i}`);
+                const avgRttEl = document.getElementById(`peer-avg-rtt-${i}`);
                 const bwEl = document.getElementById(`peer-bw-${i}`);
+                const avgBwEl = document.getElementById(`peer-avg-bw-${i}`);
+                const rxDataEl = document.getElementById(`peer-rx-data-${i}`);
+                const rxRtcpEl = document.getElementById(`peer-rx-rtcp-${i}`);
+                const txRtcpEl = document.getElementById(`peer-tx-rtcp-${i}`);
+                const dotEl = document.getElementById(`peer-dot-${i}`);
+
+                if (idEl) idEl.textContent = peer.id;
                 if (rttEl) rttEl.textContent = (peer.rtt || 0).toFixed(0) + 'ms';
+                if (avgRttEl) avgRttEl.textContent = (peer.avg_rtt || 0).toFixed(0) + 'ms';
                 if (bwEl) bwEl.textContent = (peer.bitrate || 0).toFixed(2) + ' Mbps';
+                if (avgBwEl) avgBwEl.textContent = (peer.avg_bitrate || 0).toFixed(2) + ' Mbps';
+                if (rxDataEl) rxDataEl.textContent = peer.received_data || 0;
+                if (rxRtcpEl) rxRtcpEl.textContent = peer.received_rtcp || 0;
+                if (txRtcpEl) txRtcpEl.textContent = peer.sent_rtcp || 0;
+
+                if (dotEl) {
+                    const isDead = peer.dead === 1;
+                    dotEl.style.background = isDead ? 'var(--accent-red)' : 'var(--accent-green)';
+                    dotEl.style.boxShadow = isDead ? '0 0 6px var(--accent-red)' : '0 0 6px var(--accent-green)';
+                }
             });
 
             // Update output peers from senders array
             const senders = stats.senders || [];
             updateOutputPeersDisplay(senders);
 
-            // Packets
+            // Packet stats
             const packets = stats.packets || {};
             document.getElementById('pkt-received').textContent = formatNumber(packets.received || 0);
             document.getElementById('pkt-recovered').textContent = formatNumber(packets.recovered || 0);
             document.getElementById('pkt-lost').textContent = formatNumber(packets.lost || 0);
             document.getElementById('pkt-missing').textContent = formatNumber(packets.missing || 0);
             document.getElementById('pkt-reordered').textContent = formatNumber(packets.reordered || 0);
+            document.getElementById('pkt-duplicates').textContent = formatNumber(packets.duplicates || 0);
+            document.getElementById('pkt-dropped-late').textContent = formatNumber(packets.dropped_late || 0);
+            document.getElementById('pkt-dropped-full').textContent = formatNumber(packets.dropped_full || 0);
+            document.getElementById('pkt-retries').textContent = formatNumber(packets.retries || 0);
+            document.getElementById('pkt-rec-1').textContent = formatNumber(packets.recovered_one_retry || 0);
+            document.getElementById('pkt-rec-2').textContent = formatNumber(packets.recovered_two_retry || 0);
+            document.getElementById('pkt-rec-3').textContent = formatNumber((packets.recovered_three_retry || 0) + (packets.recovered_more_retry || 0));
 
             // Output section - aggregate from all senders
             const sendersList = stats.senders || [];
             let totalOutputBw = 0;
             let totalSent = 0;
             let totalRetx = 0;
+            let totalRetryBw = 0;
             sendersList.forEach(s => {
                 totalOutputBw += s.bandwidth || 0;
                 totalSent += s.sent || 0;
                 totalRetx += s.retransmitted || 0;
+                totalRetryBw += s.retry_bandwidth || 0;
             });
-            // Fallback to single sender if senders array empty
             if (sendersList.length === 0 && stats.sender) {
                 totalOutputBw = stats.sender.bandwidth || 0;
                 totalSent = stats.sender.sent || 0;
                 totalRetx = stats.sender.retransmitted || 0;
+                totalRetryBw = stats.sender.retry_bandwidth || 0;
             }
             const outputBw = totalOutputBw;
             document.getElementById('output-bw').textContent = outputBw.toFixed(2) + ' Mbps';
             document.getElementById('output-sent').textContent = formatNumber(totalSent);
             document.getElementById('output-retx').textContent = formatNumber(totalRetx);
+            document.getElementById('output-retry-bw').textContent = totalRetryBw.toFixed(2) + ' Mbps';
 
             // Update charts
             document.getElementById('chart-input-bw').textContent = inputBw.toFixed(2) + ' Mbps';
