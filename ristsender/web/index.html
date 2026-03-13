@@ -23,11 +23,7 @@
             --transition-speed: 0.2s;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -40,10 +36,7 @@
         body::before {
             content: '';
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background-image:
                 linear-gradient(rgba(249, 115, 22, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(249, 115, 22, 0.03) 1px, transparent 1px);
@@ -62,7 +55,7 @@
         }
 
         .header-content {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             display: flex;
             justify-content: space-between;
@@ -84,7 +77,7 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 18px;
+            font-size: 16px;
         }
 
         .logo-text {
@@ -112,7 +105,6 @@
             border: none;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
             gap: 8px;
             text-decoration: none;
         }
@@ -124,25 +116,17 @@
 
         .btn-primary:hover {
             background: #ea580c;
+            transform: translateY(-1px);
         }
 
         .btn-secondary {
-            background: var(--bg-hover);
+            background: var(--bg-card);
             color: var(--text-primary);
             border: 1px solid var(--border-color);
         }
 
         .btn-secondary:hover {
-            background: var(--bg-card);
-        }
-
-        .btn-success {
-            background: var(--accent-green);
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #16a34a;
+            background: var(--bg-hover);
         }
 
         .btn-danger {
@@ -154,13 +138,69 @@
             background: #dc2626;
         }
 
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 13px;
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .btn-icon {
+            padding: 10px;
+            width: 40px;
+            height: 40px;
+            justify-content: center;
+        }
+
+        .dropdown {
+            position: relative;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            min-width: 200px;
+            padding: 8px 0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 16px;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .dropdown-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .dropdown-item svg {
+            color: var(--text-secondary);
         }
 
         .main-content {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 2rem;
         }
@@ -174,9 +214,9 @@
 
         .stat-card {
             background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.25rem;
             border: 1px solid var(--border-color);
-            border-radius: var(--card-radius);
-            padding: 1.5rem;
         }
 
         .stat-label {
@@ -186,7 +226,7 @@
         }
 
         .stat-value {
-            font-size: 2rem;
+            font-size: 24px;
             font-weight: 700;
         }
 
@@ -194,113 +234,241 @@
         .stat-value.red { color: var(--accent-red); }
         .stat-value.orange { color: var(--accent-orange); }
 
-        .section-header {
+        .toolbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .channels-grid {
-            display: grid;
+            margin-bottom: 1.5rem;
             gap: 1rem;
+            flex-wrap: wrap;
         }
 
-        .channel-card {
+        .search-box {
+            position: relative;
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: var(--card-radius);
-            padding: 1.25rem;
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            gap: 1rem;
-            align-items: center;
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
             transition: all var(--transition-speed);
         }
 
-        .channel-card:hover {
+        .search-box input:focus {
+            outline: none;
             border-color: var(--accent-orange);
-            background: var(--bg-hover);
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
         }
 
-        .channel-status {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--text-secondary);
+        .search-box::before {
+            content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23a0a0b0' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
         }
 
-        .channel-status.running {
-            background: var(--accent-green);
-            box-shadow: 0 0 10px var(--accent-green);
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
         }
 
-        .channel-status.stopped {
-            background: var(--text-secondary);
+        .filter-btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
         }
 
-        .channel-status.error {
-            background: var(--accent-red);
+        .filter-btn:hover, .filter-btn.active {
+            background: var(--accent-orange);
+            color: white;
+            border-color: var(--accent-orange);
         }
 
-        .channel-info {
-            min-width: 0;
+        .group-select {
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            min-width: 150px;
         }
 
-        .channel-name {
-            font-weight: 600;
-            font-size: 1rem;
-            margin-bottom: 4px;
+        .group-select:focus {
+            outline: none;
+            border-color: var(--accent-orange);
+        }
+
+        .channel-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .group-header {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .group-header:first-child { margin-top: 0; }
+        .group-header:hover { background: var(--bg-hover); }
+
+        .group-arrow {
+            color: var(--text-secondary);
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .group-header.collapsed .group-arrow { transform: rotate(-90deg); }
+
+        .group-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--accent-orange);
+        }
+
+        .group-count {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .group-channels { display: flex; flex-direction: column; gap: 2px; }
+        .group-header.collapsed + .group-channels { display: none; }
+
+        .channel-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            transition: background var(--transition-speed);
+        }
+
+        .channel-row:hover { background: var(--bg-hover); }
+
+        .channel-checkbox input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent-orange);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-dot.running { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+        .status-dot.stopped { background: var(--text-secondary); }
+
+        .channel-name {
+            font-weight: 500;
+            font-size: 14px;
+            min-width: 150px;
         }
 
         .channel-id {
             color: var(--text-secondary);
             font-size: 12px;
-            background: var(--bg-hover);
-            padding: 2px 8px;
-            border-radius: 4px;
+            font-family: monospace;
+            min-width: 90px;
         }
 
-        .channel-details {
+        .channel-io {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
             color: var(--text-secondary);
-            font-size: 13px;
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
+            flex: 1;
         }
 
-        .channel-detail {
-            display: flex;
+        .channel-io span { white-space: nowrap; }
+
+        .channel-status {
+            display: inline-flex;
             align-items: center;
             gap: 4px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            min-width: 70px;
+            justify-content: center;
         }
 
-        .channel-detail svg {
-            width: 14px;
-            height: 14px;
-            opacity: 0.7;
+        .channel-status.running {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .channel-status.stopped {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
         }
 
         .channel-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
         }
 
-        .btn-icon {
-            width: 36px;
-            height: 36px;
+        .channel-actions .btn {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .channel-actions .btn-icon {
+            width: 28px;
+            height: 28px;
             padding: 0;
-            display: flex;
+        }
+
+        .bulk-actions {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: none;
             align-items: center;
-            justify-content: center;
+            gap: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+
+        .bulk-actions.visible {
+            display: flex;
+        }
+
+        .bulk-count {
+            font-weight: 500;
+            color: var(--accent-orange);
         }
 
         .empty-state {
@@ -309,61 +477,84 @@
             color: var(--text-secondary);
         }
 
-        .empty-state h3 {
-            color: var(--text-primary);
-            margin-bottom: 0.5rem;
-        }
-
-        .group-section {
-            margin-bottom: 2rem;
-        }
-
-        .group-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .empty-icon {
+            font-size: 40px;
             margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border-color);
+            opacity: 0.5;
         }
 
-        .group-name {
-            font-size: 1rem;
+        .empty-title {
+            font-size: 16px;
             font-weight: 600;
-            color: var(--accent-orange);
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
 
-        .group-count {
-            background: var(--bg-hover);
-            color: var(--text-secondary);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 12px;
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
-        .loading {
-            text-align: center;
-            padding: 4rem;
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
             color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .modal-body {
+            padding: 1.25rem;
+        }
+
+        .modal-footer {
+            padding: 1.25rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
         }
 
         @media (max-width: 768px) {
-            .header {
-                padding: 1rem;
-            }
-
-            .main-content {
-                padding: 1rem;
-            }
-
-            .channel-card {
-                grid-template-columns: auto 1fr;
-            }
-
-            .channel-actions {
-                grid-column: 1 / -1;
-                justify-content: flex-end;
-            }
+            .header { padding: 1rem; }
+            .main-content { padding: 1rem; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+            .search-box { max-width: none; }
+            .channel-row { flex-wrap: wrap; }
+            .channel-actions { width: 100%; justify-content: flex-end; margin-top: 8px; }
         }
     </style>
 </head>
@@ -375,19 +566,63 @@
                 <div class="logo-text">RIST <span>Sender</span></div>
             </div>
             <div class="header-actions">
-                <a href="/server" class="btn btn-secondary">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="3" width="20" height="14" rx="2"/>
-                        <path d="M8 21h8M12 17v4"/>
-                    </svg>
-                    Server
-                </a>
                 <a href="/new" class="btn btn-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
                     New Channel
                 </a>
+                <div class="dropdown">
+                    <button class="btn btn-secondary" onclick="toggleConfigMenu()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                        </svg>
+                        Config
+                    </button>
+                    <div class="dropdown-menu" id="config-menu">
+                        <button class="dropdown-item" onclick="downloadBackup()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                            Download Backup
+                        </button>
+                        <button class="dropdown-item" onclick="showRestoreModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            Restore Backup
+                        </button>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="window.location.href='/server'" title="Server Stats">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                        <line x1="6" y1="6" x2="6.01" y2="6"/>
+                        <line x1="6" y1="18" x2="6.01" y2="18"/>
+                    </svg>
+                    Server
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="loadChannels()" title="Refresh">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="openSettingsModal()" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                    </svg>
+                </button>
+                <button class="btn btn-secondary btn-icon" onclick="logout()" title="Logout">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                </button>
             </div>
         </div>
     </header>
@@ -396,40 +631,139 @@
         <div class="stats-bar">
             <div class="stat-card">
                 <div class="stat-label">Total Channels</div>
-                <div class="stat-value" id="total-channels">-</div>
+                <div class="stat-value orange" id="stat-total">0</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Running</div>
-                <div class="stat-value green" id="running-channels">-</div>
+                <div class="stat-value green" id="stat-running">0</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Stopped</div>
-                <div class="stat-value" id="stopped-channels">-</div>
+                <div class="stat-value red" id="stat-stopped">0</div>
             </div>
         </div>
 
-        <div class="section-header">
-            <h2 class="section-title">Channels</h2>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn btn-success btn-sm" onclick="startAll()">Start All</button>
-                <button class="btn btn-danger btn-sm" onclick="stopAll()">Stop All</button>
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search channels..." oninput="handleSearch()">
+            </div>
+            <select class="group-select" id="group-filter" onchange="handleGroupFilter()">
+                <option value="">All Groups</option>
+            </select>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+                <button class="filter-btn" data-filter="running" onclick="setFilter('running')">Running</button>
+                <button class="filter-btn" data-filter="stopped" onclick="setFilter('stopped')">Stopped</button>
             </div>
         </div>
 
-        <div id="channels-container" class="loading">
-            Loading channels...
+        <div class="channel-list" id="channel-list"></div>
+
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <div class="empty-icon">&#128225;</div>
+            <div class="empty-title">No Channels</div>
+            <p>Create your first RIST sender channel to get started</p>
+            <a href="/new" class="btn btn-primary" style="margin-top: 1rem;">Create Channel</a>
         </div>
     </main>
+
+    <div class="bulk-actions" id="bulk-actions">
+        <span class="bulk-count"><span id="selected-count">0</span> selected</span>
+        <button class="btn btn-success" onclick="bulkOperation('start')">Start All</button>
+        <button class="btn btn-danger" onclick="bulkOperation('stop')">Stop All</button>
+        <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Delete Channel</span>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="delete-channel-name"></strong>?</p>
+                <p style="color: var(--text-secondary); margin-top: 8px;">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Modal -->
+    <div class="modal-overlay" id="restore-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Restore Configuration</span>
+                <button class="modal-close" onclick="closeRestoreModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Select a backup file to restore:</p>
+                <input type="file" id="restore-file" accept=".json" style="margin: 16px 0; width: 100%;">
+                <div id="restore-info" style="display: none; padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-top: 12px;">
+                    <p><strong>Source:</strong> <span id="restore-hostname">-</span></p>
+                    <p><strong>Channels:</strong> <span id="restore-count">0</span></p>
+                </div>
+                <p style="color: var(--accent-orange); margin-top: 12px; font-size: 13px;">
+                    Warning: This will stop all running channels and replace the current configuration.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+                <button class="btn btn-primary" id="restore-confirm-btn" onclick="confirmRestore()" disabled>Restore</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Settings</span>
+                <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h3 style="font-size: 14px; margin-bottom: 16px; color: var(--text-secondary);">Change Password</h3>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Current Password</label>
+                    <input type="password" id="current-password" style="width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">New Password</label>
+                    <input type="password" id="new-password" style="width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Confirm New Password</label>
+                    <input type="password" id="confirm-password" style="width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                </div>
+                <div id="password-error" style="display: none; color: var(--accent-red); font-size: 12px; margin-top: 8px;"></div>
+                <div id="password-success" style="display: none; color: var(--accent-green); font-size: 12px; margin-top: 8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="changePassword()">Change Password</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_BASE = window.location.origin + '/api';
         let channels = {};
+        let currentFilter = 'all';
+        let currentGroup = '';
+        let searchQuery = '';
+        let selectedChannels = new Set();
+        let searchDebounceTimer = null;
+        let pollInterval = null;
+        let deleteChannelId = null;
+        let collapsedGroups = new Set();
+        let restoreData = null;
 
         async function checkAuth() {
             try {
-                const response = await fetch(`${API_BASE}/auth/status`, {
-                    credentials: 'include'
-                });
+                const response = await fetch(`${API_BASE}/auth/status`, { credentials: 'include' });
                 const data = await response.json();
                 if (!data.authenticated) {
                     window.location.href = '/login';
@@ -439,10 +773,19 @@
             }
         }
 
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
+            } catch (error) {}
+            window.location.href = '/login';
+        }
+
         async function loadChannels() {
             try {
                 const response = await fetch(`${API_BASE}/channels`, {
-                    credentials: 'include'
+                    credentials: 'include',
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache' }
                 });
 
                 if (response.status === 401) {
@@ -456,138 +799,95 @@
                 updateStats();
             } catch (error) {
                 console.error('Failed to load channels:', error);
-                document.getElementById('channels-container').innerHTML =
-                    '<div class="empty-state"><h3>Error loading channels</h3><p>Please refresh the page</p></div>';
             }
-        }
-
-        function updateStats() {
-            const total = Object.keys(channels).length;
-            const running = Object.values(channels).filter(ch => ch.status === 'running').length;
-            const stopped = total - running;
-
-            document.getElementById('total-channels').textContent = total;
-            document.getElementById('running-channels').textContent = running;
-            document.getElementById('stopped-channels').textContent = stopped;
         }
 
         function renderChannels() {
-            const container = document.getElementById('channels-container');
+            const list = document.getElementById('channel-list');
+            const emptyState = document.getElementById('empty-state');
+
+            const filtered = getFilteredChannels();
 
             if (Object.keys(channels).length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No channels configured</h3>
-                        <p>Create your first channel to get started</p>
-                        <a href="/new" class="btn btn-primary" style="margin-top: 1rem;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 5v14M5 12h14"/>
-                            </svg>
-                            New Channel
-                        </a>
-                    </div>
-                `;
+                list.innerHTML = '';
+                emptyState.style.display = 'block';
                 return;
             }
 
-            // Group channels
-            const groups = {};
-            const ungrouped = [];
+            emptyState.style.display = 'none';
 
-            Object.entries(channels).forEach(([id, ch]) => {
-                if (ch.group) {
-                    if (!groups[ch.group]) groups[ch.group] = [];
-                    groups[ch.group].push({ id, ...ch });
-                } else {
-                    ungrouped.push({ id, ...ch });
-                }
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>No channels match your filter</p></div>';
+                return;
+            }
+
+            const groups = {};
+            filtered.forEach(([id, ch]) => {
+                const group = ch.group || 'Ungrouped';
+                if (!groups[group]) groups[group] = [];
+                groups[group].push([id, ch]);
+            });
+
+            const sortedGroups = Object.keys(groups).sort((a, b) => {
+                if (a === 'Ungrouped') return 1;
+                if (b === 'Ungrouped') return -1;
+                return a.localeCompare(b);
             });
 
             let html = '';
-
-            // Render grouped channels
-            Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).forEach(([groupName, chList]) => {
+            sortedGroups.forEach(groupName => {
+                const chList = groups[groupName];
+                const isCollapsed = collapsedGroups.has(groupName);
                 html += `
-                    <div class="group-section">
-                        <div class="group-header">
-                            <span class="group-name">${escapeHtml(groupName)}</span>
-                            <span class="group-count">${chList.length}</span>
-                        </div>
-                        <div class="channels-grid">
-                            ${chList.map(ch => renderChannelCard(ch)).join('')}
-                        </div>
+                    <div class="group-header ${isCollapsed ? 'collapsed' : ''}" onclick="toggleGroup('${escapeHtml(groupName)}')">
+                        <span class="group-arrow">&#9660;</span>
+                        <span class="group-name">${escapeHtml(groupName)}</span>
+                        <span class="group-count">(${chList.length})</span>
+                    </div>
+                    <div class="group-channels">
+                        ${chList.map(([id, ch]) => renderChannelRow(id, ch)).join('')}
                     </div>
                 `;
             });
 
-            // Render ungrouped channels
-            if (ungrouped.length > 0) {
-                html += `
-                    <div class="group-section">
-                        ${Object.keys(groups).length > 0 ? '<div class="group-header"><span class="group-name">Ungrouped</span><span class="group-count">' + ungrouped.length + '</span></div>' : ''}
-                        <div class="channels-grid">
-                            ${ungrouped.map(ch => renderChannelCard(ch)).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-
-            container.innerHTML = html;
+            list.innerHTML = html;
+            updateGroupFilter();
         }
 
-        function renderChannelCard(ch) {
+        function renderChannelRow(id, ch) {
+            const isRunning = ch.status === 'running';
             const outputCount = (ch.outputs || []).filter(o => o.enabled !== false).length;
 
             return `
-                <div class="channel-card">
-                    <div class="channel-status ${ch.status}"></div>
-                    <div class="channel-info">
-                        <div class="channel-name">
-                            ${escapeHtml(ch.name || ch.id)}
-                            <span class="channel-id">${ch.id}</span>
-                        </div>
-                        <div class="channel-details">
-                            <span class="channel-detail">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 19V5M5 12l7-7 7 7"/>
-                                </svg>
-                                ${escapeHtml(ch.input || 'No input')}
-                            </span>
-                            <span class="channel-detail">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 5v14M5 12l7 7 7-7"/>
-                                </svg>
-                                ${outputCount} output${outputCount !== 1 ? 's' : ''}
-                            </span>
-                        </div>
+                <div class="channel-row" data-id="${id}">
+                    <div class="channel-checkbox" onclick="event.stopPropagation()">
+                        <input type="checkbox"
+                            ${selectedChannels.has(id) ? 'checked' : ''}
+                            onchange="toggleSelection('${id}')">
                     </div>
-                    <div class="channel-actions">
-                        ${ch.status === 'running' ? `
-                            <button class="btn btn-danger btn-icon" onclick="stopChannel('${ch.id}')" title="Stop">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <rect x="6" y="6" width="12" height="12" rx="1"/>
-                                </svg>
-                            </button>
-                        ` : `
-                            <button class="btn btn-success btn-icon" onclick="startChannel('${ch.id}')" title="Start">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <polygon points="6,4 20,12 6,20"/>
-                                </svg>
-                            </button>
-                        `}
-                        <a href="/stats/${ch.id}" class="btn btn-secondary btn-icon" title="Stats">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <div class="status-dot ${isRunning ? 'running' : 'stopped'}"></div>
+                    <div class="channel-name">${escapeHtml(ch.name || id)}</div>
+                    <div class="channel-id">${id}</div>
+                    <div class="channel-io">
+                        <span title="${escapeHtml(ch.input || '')}">&#8595; ${escapeHtml(ch.input ? ch.input.substring(0, 40) : '-')}</span>
+                        <span>&#8593; ${outputCount} output${outputCount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="channel-status ${isRunning ? 'running' : 'stopped'}">
+                        ${isRunning ? 'Running' : 'Stopped'}
+                    </div>
+                    <div class="channel-actions" onclick="event.stopPropagation()">
+                        ${isRunning
+                            ? `<button class="btn btn-danger" onclick="stopChannel('${id}')">Stop</button>`
+                            : `<button class="btn btn-success" onclick="startChannel('${id}')">Start</button>`
+                        }
+                        <button class="btn btn-secondary" onclick="window.location.href='/edit/${id}'">Edit</button>
+                        <button class="btn btn-secondary btn-icon" onclick="window.location.href='/stats/${id}'" title="Stats">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 20V10M12 20V4M6 20v-6"/>
                             </svg>
-                        </a>
-                        <a href="/edit/${ch.id}" class="btn btn-secondary btn-icon" title="Edit">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                        </a>
-                        <button class="btn btn-secondary btn-icon" onclick="deleteChannel('${ch.id}')" title="Delete" style="color: var(--accent-red);">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        </button>
+                        <button class="btn btn-secondary btn-icon" onclick="showDeleteModal('${id}', '${escapeHtml(ch.name || id)}')" title="Delete">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                             </svg>
                         </button>
@@ -596,13 +896,111 @@
             `;
         }
 
+        function toggleGroup(groupName) {
+            if (collapsedGroups.has(groupName)) {
+                collapsedGroups.delete(groupName);
+            } else {
+                collapsedGroups.add(groupName);
+            }
+            renderChannels();
+        }
+
+        function updateGroupFilter() {
+            const select = document.getElementById('group-filter');
+            const groups = new Set();
+            Object.values(channels).forEach(ch => {
+                groups.add(ch.group || 'Ungrouped');
+            });
+            const sortedGroups = Array.from(groups).sort((a, b) => {
+                if (a === 'Ungrouped') return 1;
+                if (b === 'Ungrouped') return -1;
+                return a.localeCompare(b);
+            });
+            select.innerHTML = '<option value="">All Groups</option>' +
+                sortedGroups.map(g => `<option value="${escapeHtml(g)}" ${currentGroup === g ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('');
+        }
+
+        function handleGroupFilter() {
+            currentGroup = document.getElementById('group-filter').value;
+            renderChannels();
+        }
+
+        function getFilteredChannels() {
+            return Object.entries(channels).filter(([id, ch]) => {
+                if (currentGroup && (ch.group || 'Ungrouped') !== currentGroup) return false;
+                if (currentFilter === 'running' && ch.status !== 'running') return false;
+                if (currentFilter === 'stopped' && ch.status === 'running') return false;
+
+                if (searchQuery) {
+                    const query = searchQuery.toLowerCase();
+                    const name = (ch.name || '').toLowerCase();
+                    const idLower = id.toLowerCase();
+                    const group = (ch.group || '').toLowerCase();
+                    const input = (ch.input || '').toLowerCase();
+                    const outputs = (ch.outputs || []).map(o => o.url + ' ' + (o.name || '')).join(' ').toLowerCase();
+
+                    if (!name.includes(query) && !idLower.includes(query) && !group.includes(query) &&
+                        !input.includes(query) && !outputs.includes(query)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        }
+
+        function updateStats() {
+            const all = Object.entries(channels);
+            const running = all.filter(([id, ch]) => ch.status === 'running').length;
+            const stopped = all.length - running;
+
+            document.getElementById('stat-total').textContent = all.length;
+            document.getElementById('stat-running').textContent = running;
+            document.getElementById('stat-stopped').textContent = stopped;
+        }
+
+        function handleSearch() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                searchQuery = document.getElementById('search-input').value;
+                renderChannels();
+            }, 200);
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            renderChannels();
+        }
+
+        function toggleSelection(id) {
+            if (selectedChannels.has(id)) {
+                selectedChannels.delete(id);
+            } else {
+                selectedChannels.add(id);
+            }
+            updateBulkActionsBar();
+        }
+
+        function updateBulkActionsBar() {
+            const bar = document.getElementById('bulk-actions');
+            const count = document.getElementById('selected-count');
+            count.textContent = selectedChannels.size;
+            bar.classList.toggle('visible', selectedChannels.size > 0);
+        }
+
+        function clearSelection() {
+            selectedChannels.clear();
+            updateBulkActionsBar();
+            renderChannels();
+        }
+
         async function startChannel(id) {
             try {
-                await fetch(`${API_BASE}/channels/${id}/start`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-                loadChannels();
+                await fetch(`${API_BASE}/channels/${id}/start`, { method: 'POST', credentials: 'include' });
+                await loadChannels();
             } catch (error) {
                 console.error('Failed to start channel:', error);
             }
@@ -610,53 +1008,186 @@
 
         async function stopChannel(id) {
             try {
-                await fetch(`${API_BASE}/channels/${id}/stop`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-                loadChannels();
+                await fetch(`${API_BASE}/channels/${id}/stop`, { method: 'POST', credentials: 'include' });
+                await loadChannels();
             } catch (error) {
                 console.error('Failed to stop channel:', error);
             }
         }
 
-        async function deleteChannel(id) {
-            if (!confirm(`Delete channel ${id}?`)) return;
+        async function bulkOperation(operation) {
+            if (selectedChannels.size === 0) return;
 
             try {
-                await fetch(`${API_BASE}/channels/${id}`, {
-                    method: 'DELETE',
-                    credentials: 'include'
-                });
-                loadChannels();
+                const endpoint = operation === 'start' ? '/channels/start-all' : '/channels/stop-all';
+                await fetch(`${API_BASE}${endpoint}`, { method: 'POST', credentials: 'include' });
+                clearSelection();
+                setTimeout(loadChannels, 500);
+            } catch (error) {
+                console.error('Bulk operation error:', error);
+            }
+        }
+
+        function showDeleteModal(id, name) {
+            deleteChannelId = id;
+            document.getElementById('delete-channel-name').textContent = name;
+            document.getElementById('delete-modal').classList.add('visible');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('visible');
+            deleteChannelId = null;
+        }
+
+        async function confirmDelete() {
+            if (!deleteChannelId) return;
+
+            try {
+                await fetch(`${API_BASE}/channels/${deleteChannelId}`, { method: 'DELETE', credentials: 'include' });
+                closeDeleteModal();
+                await loadChannels();
             } catch (error) {
                 console.error('Failed to delete channel:', error);
             }
         }
 
-        async function startAll() {
+        function toggleConfigMenu() {
+            document.getElementById('config-menu').classList.toggle('show');
+        }
+
+        async function downloadBackup() {
             try {
-                await fetch(`${API_BASE}/channels/start-all`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-                setTimeout(loadChannels, 500);
+                const response = await fetch(`${API_BASE}/config/backup`, { credentials: 'include' });
+                const data = await response.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ristsender-backup-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
             } catch (error) {
-                console.error('Failed to start all:', error);
+                console.error('Backup failed:', error);
+                alert('Failed to download backup');
+            }
+            toggleConfigMenu();
+        }
+
+        function showRestoreModal() {
+            toggleConfigMenu();
+            document.getElementById('restore-modal').classList.add('visible');
+            document.getElementById('restore-file').value = '';
+            document.getElementById('restore-info').style.display = 'none';
+            document.getElementById('restore-confirm-btn').disabled = true;
+            restoreData = null;
+        }
+
+        function closeRestoreModal() {
+            document.getElementById('restore-modal').classList.remove('visible');
+        }
+
+        document.getElementById('restore-file').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    restoreData = JSON.parse(e.target.result);
+                    document.getElementById('restore-hostname').textContent = restoreData.hostname || '-';
+                    document.getElementById('restore-count').textContent = Object.keys(restoreData.channels || {}).length;
+                    document.getElementById('restore-info').style.display = 'block';
+                    document.getElementById('restore-confirm-btn').disabled = false;
+                } catch (err) {
+                    alert('Invalid backup file');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        async function confirmRestore() {
+            if (!restoreData) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/config/restore`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(restoreData)
+                });
+
+                if (response.ok) {
+                    closeRestoreModal();
+                    await loadChannels();
+                    alert('Configuration restored successfully');
+                } else {
+                    const data = await response.json();
+                    alert('Restore failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Restore failed:', error);
+                alert('Failed to restore configuration');
             }
         }
 
-        async function stopAll() {
-            if (!confirm('Stop all channels?')) return;
+        function openSettingsModal() {
+            document.getElementById('settings-modal').classList.add('visible');
+            document.getElementById('current-password').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('confirm-password').value = '';
+            document.getElementById('password-error').style.display = 'none';
+            document.getElementById('password-success').style.display = 'none';
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').classList.remove('visible');
+        }
+
+        async function changePassword() {
+            const current = document.getElementById('current-password').value;
+            const newPass = document.getElementById('new-password').value;
+            const confirm = document.getElementById('confirm-password').value;
+
+            const errorEl = document.getElementById('password-error');
+            const successEl = document.getElementById('password-success');
+
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+
+            if (!current || !newPass || !confirm) {
+                errorEl.textContent = 'All fields are required';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            if (newPass !== confirm) {
+                errorEl.textContent = 'New passwords do not match';
+                errorEl.style.display = 'block';
+                return;
+            }
 
             try {
-                await fetch(`${API_BASE}/channels/stop-all`, {
+                const response = await fetch(`${API_BASE}/auth/password`, {
                     method: 'POST',
-                    credentials: 'include'
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ current_password: current, new_password: newPass })
                 });
-                setTimeout(loadChannels, 500);
+
+                if (response.ok) {
+                    successEl.textContent = 'Password changed successfully';
+                    successEl.style.display = 'block';
+                    document.getElementById('current-password').value = '';
+                    document.getElementById('new-password').value = '';
+                    document.getElementById('confirm-password').value = '';
+                } else {
+                    const data = await response.json();
+                    errorEl.textContent = data.detail || 'Failed to change password';
+                    errorEl.style.display = 'block';
+                }
             } catch (error) {
-                console.error('Failed to stop all:', error);
+                errorEl.textContent = 'Failed to change password';
+                errorEl.style.display = 'block';
             }
         }
 
@@ -667,12 +1198,20 @@
             return div.innerHTML;
         }
 
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            }
+        });
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             await loadChannels();
-            // Refresh every 5 seconds
-            setInterval(loadChannels, 5000);
+            pollInterval = setInterval(loadChannels, 5000);
         });
     </script>
 </body>

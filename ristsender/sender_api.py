@@ -198,6 +198,10 @@ class Channel(BaseModel):
 class LoginRequest(BaseModel):
     password: str
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
 # =============================================================================
 # Configuration Management
 # =============================================================================
@@ -441,6 +445,10 @@ SESSIONS: Dict[str, datetime] = {}
 SESSION_TIMEOUT = timedelta(hours=24)
 DEFAULT_PASSWORD = 'admin'
 
+def hash_password(password: str) -> str:
+    """Hash password with SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
 def get_password_hash() -> str:
     """Get password hash from config or use default"""
     config = load_config()
@@ -555,22 +563,6 @@ async def auth_status(request: Request):
     """Check authentication status"""
     session_id = request.cookies.get('session_id')
     return {"authenticated": verify_session(session_id)}
-
-@app.post("/api/change-password")
-async def change_password(request: Request, session_id: str = Depends(require_auth)):
-    """Change password"""
-    data = await request.json()
-    new_password = data.get('new_password')
-    if not new_password or len(new_password) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
-
-    config = load_config()
-    if 'system' not in config:
-        config['system'] = {}
-    config['system']['password_hash'] = hashlib.sha256(new_password.encode()).hexdigest()
-    save_config(config)
-
-    return {"success": True}
 
 # =============================================================================
 # Channel Routes
@@ -922,6 +914,109 @@ async def get_interface_history_endpoint(minutes: int = 60, session_id: str = De
                 result[iface] = filtered
 
     return result
+
+# =============================================================================
+# Config Backup/Restore Routes
+# =============================================================================
+
+@app.get("/api/config/backup")
+async def download_config_backup(session_id: str = Depends(require_auth)):
+    """Download current configuration as JSON"""
+    config = load_config()
+    channels = config.get('channels', {})
+
+    # Capture current running state for each channel
+    for ch_id, ch in channels.items():
+        status = get_channel_status(ch_id)
+        if 'autostart' not in ch:
+            ch['autostart'] = status == 'running'
+
+    backup_data = {
+        'version': '1.0',
+        'timestamp': datetime.now().isoformat(),
+        'hostname': os.uname().nodename,
+        'channels': channels,
+        'system': config.get('system', {})
+    }
+
+    content = json.dumps(backup_data, indent=2)
+    filename = f"ristsender_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.post("/api/config/restore")
+async def restore_config_backup(request: Request, session_id: str = Depends(require_auth)):
+    """Restore configuration from uploaded JSON backup"""
+    try:
+        backup_data = await request.json()
+
+        if 'channels' not in backup_data:
+            raise HTTPException(status_code=400, detail="Invalid backup: missing channels")
+
+        # Stop all running channels and remove service files
+        config = load_config()
+        for ch_id in config.get('channels', {}):
+            try:
+                subprocess.run(['systemctl', 'stop', f'ristsender-{ch_id}.service'],
+                              capture_output=True)
+                delete_service_file(ch_id)
+            except:
+                pass
+
+        # Preserve password hash from current config
+        password_hash = config.get('system', {}).get('password_hash')
+
+        # Build new config
+        new_config = {
+            'channels': backup_data.get('channels', {}),
+            'system': backup_data.get('system', config.get('system', {}))
+        }
+
+        if password_hash:
+            new_config['system']['password_hash'] = password_hash
+
+        save_config(new_config)
+
+        # Recreate service files for all channels
+        for ch_id, ch in new_config.get('channels', {}).items():
+            if not ch.get('metrics_port'):
+                ch['metrics_port'] = get_next_metrics_port(new_config)
+            generate_service_file(ch_id, ch)
+
+            # Start channels that were running
+            if ch.get('autostart', False):
+                subprocess.run(['systemctl', 'start', f'ristsender-{ch_id}.service'],
+                              capture_output=True)
+
+        return {"success": True, "message": "Configuration restored successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Restore failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/password")
+async def change_password(request: PasswordChange, session_id: str = Depends(require_auth)):
+    """Change admin password"""
+    config = load_config()
+    stored_hash = config.get('system', {}).get('password_hash', hash_password('admin'))
+    current_hash = hash_password(request.current_password)
+
+    if current_hash != stored_hash:
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    if 'system' not in config:
+        config['system'] = {}
+
+    config['system']['password_hash'] = hash_password(request.new_password)
+    save_config(config)
+
+    return {"success": True, "message": "Password changed successfully"}
 
 # =============================================================================
 # Static Files & HTML Routes
