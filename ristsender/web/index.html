@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RIST Sender Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --border-color: #2a2a3a;
+            --card-radius: 16px;
+            --transition-speed: 0.2s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(249, 115, 22, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(249, 115, 22, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-orange), #ef4444);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .logo-text span {
+            color: var(--accent-orange);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--accent-orange);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #ea580c;
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card);
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            padding: 1.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.orange { color: var(--accent-orange); }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .channels-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .channel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            padding: 1.25rem;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            transition: all var(--transition-speed);
+        }
+
+        .channel-card:hover {
+            border-color: var(--accent-orange);
+            background: var(--bg-hover);
+        }
+
+        .channel-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+
+        .channel-status.running {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .channel-status.stopped {
+            background: var(--text-secondary);
+        }
+
+        .channel-status.error {
+            background: var(--accent-red);
+        }
+
+        .channel-info {
+            min-width: 0;
+        }
+
+        .channel-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .channel-id {
+            color: var(--text-secondary);
+            font-size: 12px;
+            background: var(--bg-hover);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .channel-details {
+            color: var(--text-secondary);
+            font-size: 13px;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .channel-detail {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .channel-detail svg {
+            width: 14px;
+            height: 14px;
+            opacity: 0.7;
+        }
+
+        .channel-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state h3 {
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .group-section {
+            margin-bottom: 2rem;
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .group-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-orange);
+        }
+
+        .group-count {
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            .channel-card {
+                grid-template-columns: auto 1fr;
+            }
+
+            .channel-actions {
+                grid-column: 1 / -1;
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">S</div>
+                <div class="logo-text">RIST <span>Sender</span></div>
+            </div>
+            <div class="header-actions">
+                <a href="/server" class="btn btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                    </svg>
+                    Server
+                </a>
+                <a href="/new" class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    New Channel
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Total Channels</div>
+                <div class="stat-value" id="total-channels">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Running</div>
+                <div class="stat-value green" id="running-channels">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Stopped</div>
+                <div class="stat-value" id="stopped-channels">-</div>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">Channels</h2>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-success btn-sm" onclick="startAll()">Start All</button>
+                <button class="btn btn-danger btn-sm" onclick="stopAll()">Stop All</button>
+            </div>
+        </div>
+
+        <div id="channels-container" class="loading">
+            Loading channels...
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        let channels = {};
+
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/status`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        async function loadChannels() {
+            try {
+                const response = await fetch(`${API_BASE}/channels`, {
+                    credentials: 'include'
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json();
+                channels = data.channels || {};
+                renderChannels();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load channels:', error);
+                document.getElementById('channels-container').innerHTML =
+                    '<div class="empty-state"><h3>Error loading channels</h3><p>Please refresh the page</p></div>';
+            }
+        }
+
+        function updateStats() {
+            const total = Object.keys(channels).length;
+            const running = Object.values(channels).filter(ch => ch.status === 'running').length;
+            const stopped = total - running;
+
+            document.getElementById('total-channels').textContent = total;
+            document.getElementById('running-channels').textContent = running;
+            document.getElementById('stopped-channels').textContent = stopped;
+        }
+
+        function renderChannels() {
+            const container = document.getElementById('channels-container');
+
+            if (Object.keys(channels).length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No channels configured</h3>
+                        <p>Create your first channel to get started</p>
+                        <a href="/new" class="btn btn-primary" style="margin-top: 1rem;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            New Channel
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            // Group channels
+            const groups = {};
+            const ungrouped = [];
+
+            Object.entries(channels).forEach(([id, ch]) => {
+                if (ch.group) {
+                    if (!groups[ch.group]) groups[ch.group] = [];
+                    groups[ch.group].push({ id, ...ch });
+                } else {
+                    ungrouped.push({ id, ...ch });
+                }
+            });
+
+            let html = '';
+
+            // Render grouped channels
+            Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).forEach(([groupName, chList]) => {
+                html += `
+                    <div class="group-section">
+                        <div class="group-header">
+                            <span class="group-name">${escapeHtml(groupName)}</span>
+                            <span class="group-count">${chList.length}</span>
+                        </div>
+                        <div class="channels-grid">
+                            ${chList.map(ch => renderChannelCard(ch)).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Render ungrouped channels
+            if (ungrouped.length > 0) {
+                html += `
+                    <div class="group-section">
+                        ${Object.keys(groups).length > 0 ? '<div class="group-header"><span class="group-name">Ungrouped</span><span class="group-count">' + ungrouped.length + '</span></div>' : ''}
+                        <div class="channels-grid">
+                            ${ungrouped.map(ch => renderChannelCard(ch)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function renderChannelCard(ch) {
+            const outputCount = (ch.outputs || []).filter(o => o.enabled !== false).length;
+
+            return `
+                <div class="channel-card">
+                    <div class="channel-status ${ch.status}"></div>
+                    <div class="channel-info">
+                        <div class="channel-name">
+                            ${escapeHtml(ch.name || ch.id)}
+                            <span class="channel-id">${ch.id}</span>
+                        </div>
+                        <div class="channel-details">
+                            <span class="channel-detail">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 19V5M5 12l7-7 7 7"/>
+                                </svg>
+                                ${escapeHtml(ch.input || 'No input')}
+                            </span>
+                            <span class="channel-detail">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 5v14M5 12l7 7 7-7"/>
+                                </svg>
+                                ${outputCount} output${outputCount !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="channel-actions">
+                        ${ch.status === 'running' ? `
+                            <button class="btn btn-danger btn-icon" onclick="stopChannel('${ch.id}')" title="Stop">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="6" width="12" height="12" rx="1"/>
+                                </svg>
+                            </button>
+                        ` : `
+                            <button class="btn btn-success btn-icon" onclick="startChannel('${ch.id}')" title="Start">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="6,4 20,12 6,20"/>
+                                </svg>
+                            </button>
+                        `}
+                        <a href="/stats/${ch.id}" class="btn btn-secondary btn-icon" title="Stats">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 20V10M12 20V4M6 20v-6"/>
+                            </svg>
+                        </a>
+                        <a href="/edit/${ch.id}" class="btn btn-secondary btn-icon" title="Edit">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </a>
+                        <button class="btn btn-secondary btn-icon" onclick="deleteChannel('${ch.id}')" title="Delete" style="color: var(--accent-red);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function startChannel(id) {
+            try {
+                await fetch(`${API_BASE}/channels/${id}/start`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                loadChannels();
+            } catch (error) {
+                console.error('Failed to start channel:', error);
+            }
+        }
+
+        async function stopChannel(id) {
+            try {
+                await fetch(`${API_BASE}/channels/${id}/stop`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                loadChannels();
+            } catch (error) {
+                console.error('Failed to stop channel:', error);
+            }
+        }
+
+        async function deleteChannel(id) {
+            if (!confirm(`Delete channel ${id}?`)) return;
+
+            try {
+                await fetch(`${API_BASE}/channels/${id}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                loadChannels();
+            } catch (error) {
+                console.error('Failed to delete channel:', error);
+            }
+        }
+
+        async function startAll() {
+            try {
+                await fetch(`${API_BASE}/channels/start-all`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                setTimeout(loadChannels, 500);
+            } catch (error) {
+                console.error('Failed to start all:', error);
+            }
+        }
+
+        async function stopAll() {
+            if (!confirm('Stop all channels?')) return;
+
+            try {
+                await fetch(`${API_BASE}/channels/stop-all`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                setTimeout(loadChannels, 500);
+            } catch (error) {
+                console.error('Failed to stop all:', error);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            await loadChannels();
+            // Refresh every 5 seconds
+            setInterval(loadChannels, 5000);
+        });
+    </script>
+</body>
+</html>

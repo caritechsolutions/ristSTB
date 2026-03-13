@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Stats - RIST Sender</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --border-color: #2a2a3a;
+            --card-radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            padding: 1.5rem;
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .stat-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.purple { color: var(--accent-purple); }
+
+        .stat-details {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .stat-detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-detail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .stat-detail-label {
+            color: var(--text-secondary);
+        }
+
+        .stat-detail-value {
+            font-weight: 500;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.green { background: var(--accent-green); }
+        .progress-fill.orange { background: var(--accent-orange); }
+        .progress-fill.red { background: var(--accent-red); }
+
+        .section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            padding: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .chart-container {
+            height: 200px;
+        }
+
+        .info-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            padding: 1.5rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .info-value {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card);
+        }
+
+        @media (max-width: 768px) {
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="/" class="back-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                Back to Dashboard
+            </a>
+            <span class="page-title">Server Statistics</span>
+            <button class="btn btn-secondary" onclick="location.reload()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            <path d="M9 9h6v6H9z"/>
+                        </svg>
+                        CPU Usage
+                    </span>
+                </div>
+                <div class="stat-value" id="cpu-percent">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="cpu-bar" style="width: 0%"></div>
+                </div>
+                <div class="stat-details">
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Cores</span>
+                        <span class="stat-detail-value" id="cpu-cores">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 19v-3M10 19v-6M14 19v-9M18 19V5"/>
+                        </svg>
+                        Memory
+                    </span>
+                </div>
+                <div class="stat-value blue" id="mem-percent">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="mem-bar" style="width: 0%"></div>
+                </div>
+                <div class="stat-details">
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Used</span>
+                        <span class="stat-detail-value" id="mem-used">-</span>
+                    </div>
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Total</span>
+                        <span class="stat-detail-value" id="mem-total">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Disk
+                    </span>
+                </div>
+                <div class="stat-value purple" id="disk-percent">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="disk-bar" style="width: 0%"></div>
+                </div>
+                <div class="stat-details">
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Used</span>
+                        <span class="stat-detail-value" id="disk-used">-</span>
+                    </div>
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Total</span>
+                        <span class="stat-detail-value" id="disk-total">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <path d="M22 6l-10 7L2 6"/>
+                        </svg>
+                        Channels
+                    </span>
+                </div>
+                <div class="stat-value orange" id="total-channels">-</div>
+                <div class="stat-details">
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Running</span>
+                        <span class="stat-detail-value" id="running-channels">-</span>
+                    </div>
+                    <div class="stat-detail-row">
+                        <span class="stat-detail-label">Stopped</span>
+                        <span class="stat-detail-value" id="stopped-channels">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 20V10M12 20V4M6 20v-6"/>
+                </svg>
+                Resource History
+            </h2>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <div class="chart-title">CPU Usage (%)</div>
+                    <div class="chart-container">
+                        <canvas id="cpu-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Memory Usage (%)</div>
+                    <div class="chart-container">
+                        <canvas id="memory-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <path d="M8 21h8M12 17v4"/>
+                </svg>
+                System Information
+            </h2>
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Hostname</span>
+                    <span class="info-value" id="hostname">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Uptime</span>
+                    <span class="info-value" id="uptime">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">API Version</span>
+                    <span class="info-value">RIST Sender 1.0</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        let cpuChart = null;
+        let memoryChart = null;
+        let cpuHistory = [];
+        let memoryHistory = [];
+
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/status`, { credentials: 'include' });
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        async function loadSystemHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/system/health`, { credentials: 'include' });
+                const data = await response.json();
+                updateHealthDisplay(data);
+            } catch (error) {
+                console.error('Failed to load system health:', error);
+            }
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch(`${API_BASE}/system/info`, { credentials: 'include' });
+                const data = await response.json();
+                updateInfoDisplay(data);
+            } catch (error) {
+                console.error('Failed to load system info:', error);
+            }
+        }
+
+        function updateHealthDisplay(data) {
+            // CPU
+            const cpuPercent = data.cpu?.percent || 0;
+            document.getElementById('cpu-percent').textContent = cpuPercent.toFixed(1) + '%';
+            document.getElementById('cpu-cores').textContent = data.cpu?.cores || '-';
+            updateProgressBar('cpu-bar', cpuPercent);
+
+            // Memory
+            const memPercent = data.memory?.percent || 0;
+            document.getElementById('mem-percent').textContent = memPercent.toFixed(1) + '%';
+            document.getElementById('mem-used').textContent = formatBytes(data.memory?.used || 0);
+            document.getElementById('mem-total').textContent = formatBytes(data.memory?.total || 0);
+            updateProgressBar('mem-bar', memPercent);
+
+            // Disk
+            const diskPercent = data.disk?.percent || 0;
+            document.getElementById('disk-percent').textContent = diskPercent.toFixed(1) + '%';
+            document.getElementById('disk-used').textContent = formatBytes(data.disk?.used || 0);
+            document.getElementById('disk-total').textContent = formatBytes(data.disk?.total || 0);
+            updateProgressBar('disk-bar', diskPercent);
+
+            // Update history
+            cpuHistory.push(cpuPercent);
+            memoryHistory.push(memPercent);
+            if (cpuHistory.length > 60) cpuHistory.shift();
+            if (memoryHistory.length > 60) memoryHistory.shift();
+            updateCharts();
+        }
+
+        function updateInfoDisplay(data) {
+            document.getElementById('hostname').textContent = data.hostname || '-';
+            document.getElementById('uptime').textContent = formatUptime(data.uptime || 0);
+            document.getElementById('total-channels').textContent = data.total_channels || 0;
+            document.getElementById('running-channels').textContent = data.running_channels || 0;
+            document.getElementById('stopped-channels').textContent = data.stopped_channels || 0;
+        }
+
+        function updateProgressBar(id, percent) {
+            const bar = document.getElementById(id);
+            bar.style.width = percent + '%';
+
+            bar.className = 'progress-fill';
+            if (percent < 60) {
+                bar.classList.add('green');
+            } else if (percent < 85) {
+                bar.classList.add('orange');
+            } else {
+                bar.classList.add('red');
+            }
+        }
+
+        function initCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        min: 0,
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#a0a0b0' }
+                    }
+                }
+            };
+
+            cpuChart = new Chart(document.getElementById('cpu-chart'), {
+                type: 'line',
+                data: {
+                    labels: Array(60).fill(''),
+                    datasets: [{
+                        data: cpuHistory,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: chartOptions
+            });
+
+            memoryChart = new Chart(document.getElementById('memory-chart'), {
+                type: 'line',
+                data: {
+                    labels: Array(60).fill(''),
+                    datasets: [{
+                        data: memoryHistory,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        function updateCharts() {
+            if (cpuChart) {
+                cpuChart.data.datasets[0].data = cpuHistory;
+                cpuChart.update('none');
+            }
+            if (memoryChart) {
+                memoryChart.data.datasets[0].data = memoryHistory;
+                memoryChart.update('none');
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+            if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return bytes + ' B';
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            let parts = [];
+            if (days > 0) parts.push(days + 'd');
+            if (hours > 0) parts.push(hours + 'h');
+            if (minutes > 0) parts.push(minutes + 'm');
+            return parts.join(' ') || '< 1m';
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            initCharts();
+            await loadSystemHealth();
+            await loadSystemInfo();
+
+            setInterval(loadSystemHealth, 2000);
+            setInterval(loadSystemInfo, 10000);
+        });
+    </script>
+</body>
+</html>
