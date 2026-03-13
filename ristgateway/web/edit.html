@@ -448,6 +448,28 @@
             accent-color: var(--accent-green);
         }
 
+        /* Group select */
+        .group-select-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .new-group-input {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .new-group-input .form-input {
+            flex: 1;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header {
@@ -502,9 +524,16 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="gateway-group">Group</label>
-                        <input type="text" id="gateway-group" class="form-input" list="group-list" placeholder="Select or type new group">
-                        <datalist id="group-list"></datalist>
-                        <p class="form-hint">Type to create new group or select existing</p>
+                        <div class="group-select-wrapper">
+                            <select id="gateway-group" class="form-select" onchange="handleGroupChange()">
+                                <option value="">No Group</option>
+                                <option value="__new__">+ Add New Group...</option>
+                            </select>
+                            <div id="new-group-input" class="new-group-input" style="display: none;">
+                                <input type="text" id="new-group-name" class="form-input" placeholder="Enter group name">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="cancelNewGroup()">Cancel</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group">
@@ -670,18 +699,63 @@
                     Object.values(gateways).forEach(gw => {
                         if (gw.group) existingGroups.add(gw.group);
                     });
-                    updateGroupDatalist();
+                    updateGroupDropdown();
                 }
             } catch (e) {
                 console.error('Failed to load groups:', e);
             }
         }
 
-        // Update the group datalist
-        function updateGroupDatalist() {
-            const datalist = document.getElementById('group-list');
+        // Update the group dropdown options
+        function updateGroupDropdown(selectedValue = '') {
+            const select = document.getElementById('gateway-group');
             const sortedGroups = Array.from(existingGroups).sort();
-            datalist.innerHTML = sortedGroups.map(g => `<option value="${escapeHtml(g)}">`).join('');
+
+            // Keep first two options (No Group, Add New)
+            select.innerHTML = `
+                <option value="">No Group</option>
+                ${sortedGroups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}
+                <option value="__new__">+ Add New Group...</option>
+            `;
+
+            // Set selected value if provided
+            if (selectedValue && selectedValue !== '__new__') {
+                select.value = selectedValue;
+            }
+        }
+
+        // Handle group dropdown change
+        function handleGroupChange() {
+            const select = document.getElementById('gateway-group');
+            const newGroupDiv = document.getElementById('new-group-input');
+
+            if (select.value === '__new__') {
+                newGroupDiv.style.display = 'flex';
+                document.getElementById('new-group-name').focus();
+            } else {
+                newGroupDiv.style.display = 'none';
+            }
+        }
+
+        // Cancel new group input
+        function cancelNewGroup() {
+            const select = document.getElementById('gateway-group');
+            const newGroupDiv = document.getElementById('new-group-input');
+            const newGroupInput = document.getElementById('new-group-name');
+
+            newGroupDiv.style.display = 'none';
+            newGroupInput.value = '';
+            select.value = '';
+        }
+
+        // Get selected group value (handles new group)
+        function getSelectedGroup() {
+            const select = document.getElementById('gateway-group');
+            if (select.value === '__new__') {
+                const newName = document.getElementById('new-group-name').value.trim();
+                return newName || null;
+            }
+            return select.value || null;
         }
 
         // Check authentication
@@ -729,7 +803,11 @@
         // Populate form with gateway data
         function populateForm(gateway) {
             document.getElementById('gateway-name').value = gateway.name || '';
-            document.getElementById('gateway-group').value = gateway.group || '';
+            // Add group to set if exists, then update dropdown with selection
+            if (gateway.group) {
+                existingGroups.add(gateway.group);
+            }
+            updateGroupDropdown(gateway.group || '');
             document.getElementById('gateway-enabled').checked = gateway.enabled !== false;
 
             // Settings
@@ -886,7 +964,7 @@
 
             const gatewayData = {
                 name: document.getElementById('gateway-name').value.trim(),
-                group: document.getElementById('gateway-group').value.trim() || null,
+                group: getSelectedGroup(),
                 enabled: document.getElementById('gateway-enabled').checked,
                 inputs: inputs,
                 outputs: outputs,

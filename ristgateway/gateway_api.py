@@ -759,6 +759,7 @@ class GatewaySettings(BaseModel):
 
 class GatewayConfig(BaseModel):
     name: str
+    group: Optional[str] = None
     enabled: bool = True
     inputs: List[PeerConfig]
     outputs: List[PeerConfig]
@@ -767,6 +768,7 @@ class GatewayConfig(BaseModel):
 
 class GatewayUpdate(BaseModel):
     name: Optional[str] = None
+    group: Optional[str] = None
     enabled: Optional[bool] = None
     inputs: Optional[List[PeerConfig]] = None
     outputs: Optional[List[PeerConfig]] = None
