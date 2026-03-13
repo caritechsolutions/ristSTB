@@ -633,6 +633,13 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        function formatMbps(bytesPerSec) {
+            // Convert bytes/sec to Mbps (megabits per second)
+            if (!bytesPerSec || bytesPerSec <= 0) return '0 Mbps';
+            const mbps = (bytesPerSec * 8) / 1000000;
+            return mbps.toFixed(2) + ' Mbps';
+        }
+
         function formatUptime(seconds) {
             const days = Math.floor(seconds / 86400);
             const hours = Math.floor((seconds % 86400) / 3600);
@@ -665,7 +672,7 @@
                             color: '#a0a0b0',
                             font: { size: 10 },
                             callback: function(value) {
-                                return formatBytesRate(value);
+                                return formatMbps(value);
                             }
                         }
                     }
@@ -910,10 +917,10 @@
                     }
 
                     const rxRateEl = document.getElementById(`rx-rate-${name}`);
-                    if (rxRateEl) rxRateEl.textContent = formatBytesRate(rxRate);
+                    if (rxRateEl) rxRateEl.textContent = formatMbps(rxRate);
 
                     const txRateEl = document.getElementById(`tx-rate-${name}`);
-                    if (txRateEl) txRateEl.textContent = formatBytesRate(txRate);
+                    if (txRateEl) txRateEl.textContent = formatMbps(txRate);
 
                     const rxTotalEl = document.getElementById(`rx-total-${name}`);
                     if (rxTotalEl) rxTotalEl.textContent = `Total: ${formatBytes(iface.bytes_recv)}`;
