@@ -977,6 +977,31 @@
 
             // Per-input-peer stats
             const peerDetails = stats.peer_details || [];
+            const inputCount = (gateway.inputs || []).length;
+
+            // If peer_details is empty but we have dead/alive counts, use those for dot colors
+            if (peerDetails.length === 0 && inputCount > 0) {
+                const deadPeers = stats.dead_peers || 0;
+                const alivePeers = stats.alive_peers || 0;
+                // If all peers are dead, set all dots red
+                const allDead = (deadPeers > 0 && alivePeers === 0);
+                // If no peer info at all, show gray (unknown)
+                const noInfo = (deadPeers === 0 && alivePeers === 0);
+
+                for (let i = 0; i < inputCount; i++) {
+                    const dotEl = document.getElementById(`peer-dot-${i}`);
+                    if (dotEl) {
+                        if (allDead) {
+                            dotEl.style.background = 'var(--accent-red)';
+                            dotEl.style.boxShadow = '0 0 6px var(--accent-red)';
+                        } else if (noInfo) {
+                            dotEl.style.background = 'var(--text-secondary)';
+                            dotEl.style.boxShadow = 'none';
+                        }
+                    }
+                }
+            }
+
             peerDetails.forEach((peer, i) => {
                 const idEl = document.getElementById(`peer-id-${i}`);
                 const rttEl = document.getElementById(`peer-rtt-${i}`);
