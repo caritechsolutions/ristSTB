@@ -39,6 +39,15 @@ static int ffmpeg_stderr_fd = -1;
 static char output_dir[MAX_PATH_LEN];
 static pthread_mutex_t info_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Helper to write with return value handling */
+static void write_response(int fd, const char *data, size_t len) {
+    ssize_t written = write(fd, data, len);
+    if (written < 0) {
+        /* Connection closed or error - ignore for socket responses */
+    }
+    (void)written;
+}
+
 /* Stream info parsed from ffmpeg */
 typedef struct {
     char video_codec[32];
@@ -221,10 +230,13 @@ static void parse_stream_info(const char *line) {
             }
         }
 
-        /* Extract resolution - look for pattern like 1920x1080 */
+        /* Extract resolution - look for pattern like ", 1920x1080" or " 1920x1080 "
+         * Avoid matching hex values like "0x100" by requiring the pattern to be
+         * preceded by space/comma and followed by space/bracket */
         regex_t regex;
         regmatch_t match[3];
-        if (regcomp(&regex, "([0-9]+)x([0-9]+)", REG_EXTENDED) == 0) {
+        /* Match resolution with at least 3 digits width (100+) to avoid hex like 0x100 */
+        if (regcomp(&regex, "[, ]([0-9]{3,5})x([0-9]{3,5})[ ,\\[]", REG_EXTENDED) == 0) {
             if (regexec(&regex, line, 3, match, 0) == 0) {
                 char buf[16];
                 int len = match[1].rm_eo - match[1].rm_so;
@@ -285,12 +297,29 @@ static void parse_stream_info(const char *line) {
         else stream_info.channels = 2;
     }
 
-    /* Parse bitrate: "bitrate: 5432 kb/s" */
+    /* Parse bitrate - look for "bitrate: 5432 kb/s" or "5432 kb/s" in stream lines */
     char *br = strstr(line, "bitrate:");
     if (br && stream_info.bitrate == 0) {
-        br += 9;
+        br += 8;
         while (*br == ' ') br++;
-        stream_info.bitrate = atoi(br) * 1000;
+        /* Skip "N/A" */
+        if (*br != 'N') {
+            stream_info.bitrate = atoi(br) * 1000;
+        }
+    }
+
+    /* Also look for "kb/s" format in video stream lines (more reliable) */
+    if (strstr(line, "Video:") && stream_info.bitrate == 0) {
+        char *kbs = strstr(line, " kb/s");
+        if (kbs) {
+            char *start = kbs - 1;
+            while (start > line && *start >= '0' && *start <= '9') start--;
+            start++;
+            int rate = atoi(start);
+            if (rate > 0) {
+                stream_info.bitrate = rate * 1000;
+            }
+        }
     }
 
     /* Mark ready when we have both video and audio */
@@ -342,7 +371,7 @@ static void handle_client(int client_fd) {
     if (strcmp(cmd, "keepalive") == 0) {
         last_keepalive = time(NULL);
         const char *response = "ok\n";
-        (void)write(client_fd, response, strlen(response));
+        write_response(client_fd, response, strlen(response));
     }
     else if (strcmp(cmd, "info") == 0) {
         pthread_mutex_lock(&info_mutex);
@@ -362,11 +391,11 @@ static void handle_client(int client_fd) {
             stream_info.sample_rate,
             stream_info.bitrate);
         pthread_mutex_unlock(&info_mutex);
-        (void)write(client_fd, json, strlen(json));
+        write_response(client_fd, json, strlen(json));
     }
     else {
         const char *response = "error: unknown command\n";
-        (void)write(client_fd, response, strlen(response));
+        write_response(client_fd, response, strlen(response));
     }
 
     close(client_fd);
