@@ -252,63 +252,57 @@
             margin-bottom: 0.75rem;
         }
 
-        .peer-list { display: flex; flex-direction: column; gap: 8px; }
+        .peer-list { display: flex; flex-direction: column; gap: 6px; }
 
         .peer-row {
-            padding: 12px 14px;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            font-size: 12px;
-        }
-
-        .peer-header {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 11px;
         }
 
         .peer-dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--accent-green);
-            box-shadow: 0 0 6px var(--accent-green);
+            box-shadow: 0 0 4px var(--accent-green);
             flex-shrink: 0;
         }
 
         .peer-info {
-            flex: 1;
-            min-width: 0;
+            min-width: 200px;
+            max-width: 200px;
+            flex-shrink: 0;
         }
 
         .peer-url {
             font-family: monospace;
-            font-size: 12px;
+            font-size: 10px;
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .peer-id {
-            font-size: 10px;
+            font-size: 9px;
             color: var(--text-secondary);
-            margin-top: 2px;
         }
 
         .peer-metrics {
             display: flex;
-            flex-wrap: wrap;
-            gap: 4px 20px;
-            font-size: 11px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border-color);
+            gap: 12px;
+            flex: 1;
+            font-size: 10px;
         }
 
         .peer-metric {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 3px;
             white-space: nowrap;
         }
 
@@ -867,20 +861,18 @@
             if (inputs.length > 0) {
                 inputList.innerHTML = inputs.map((p, i) => `
                     <div class="peer-row" data-peer-index="${i}">
-                        <div class="peer-header">
-                            <div class="peer-dot" id="peer-dot-${i}"></div>
-                            <div class="peer-info">
-                                <div class="peer-url">${escapeHtml(p.url)}</div>
-                                <div class="peer-id">Peer ID: <span id="peer-id-${i}">-</span></div>
-                            </div>
+                        <div class="peer-dot" id="peer-dot-${i}"></div>
+                        <div class="peer-info">
+                            <div class="peer-url">${escapeHtml(p.url)}</div>
+                            <div class="peer-id">ID: <span id="peer-id-${i}">-</span></div>
                         </div>
                         <div class="peer-metrics">
-                            <div class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value" id="peer-rtt-${i}">-</span></div>
-                            <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-rtt-${i}">-</span></div>
-                            <div class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value" id="peer-bw-${i}">-</span></div>
-                            <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-bw-${i}">-</span></div>
-                            <div class="peer-metric"><span class="peer-metric-label">RX:</span> <span class="peer-metric-value" id="peer-rx-data-${i}">-</span></div>
-                            <div class="peer-metric"><span class="peer-metric-label">RTCP:</span> <span class="peer-metric-value" id="peer-rx-rtcp-${i}">-</span>/<span id="peer-tx-rtcp-${i}">-</span></div>
+                            <span class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value" id="peer-rtt-${i}">-</span></span>
+                            <span class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-rtt-${i}">-</span></span>
+                            <span class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value" id="peer-bw-${i}">-</span></span>
+                            <span class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-bw-${i}">-</span></span>
+                            <span class="peer-metric"><span class="peer-metric-label">RX:</span> <span class="peer-metric-value" id="peer-rx-data-${i}">-</span></span>
+                            <span class="peer-metric"><span class="peer-metric-label">RTCP:</span> <span class="peer-metric-value" id="peer-rx-rtcp-${i}">-</span>/<span id="peer-tx-rtcp-${i}">-</span></span>
                         </div>
                     </div>
                 `).join('');
@@ -899,23 +891,21 @@
                                         s.quality >= 80 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
                     return `
                         <div class="peer-row">
-                            <div class="peer-header">
-                                <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 6px ${qualityColor};"></div>
-                                <div class="peer-info">
-                                    <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
-                                    <div class="peer-id">ID: ${s.id} | Type: ${s.type || 'data'}</div>
-                                </div>
+                            <div class="peer-dot" style="background: ${qualityColor}; box-shadow: 0 0 4px ${qualityColor};"></div>
+                            <div class="peer-info">
+                                <div class="peer-url">${escapeHtml(s.cname || 'Unknown')}</div>
+                                <div class="peer-id">ID: ${s.id} | ${s.type || 'data'}</div>
                             </div>
                             <div class="peer-metrics">
-                                <div class="peer-metric"><span class="peer-metric-label">Quality:</span> <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value">${(s.rtt || 0).toFixed(0)}ms</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value">${(s.avg_rtt || 0).toFixed(0)}ms</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value">${(s.bandwidth || 0).toFixed(2)} Mbps</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">Sent:</span> <span class="peer-metric-value">${formatNumber(s.sent || 0)}</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">ACKs:</span> <span class="peer-metric-value">${formatNumber(s.received || 0)}</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">Retx:</span> <span class="peer-metric-value" style="color: ${s.retransmitted > 0 ? 'var(--accent-orange)' : ''}">${formatNumber(s.retransmitted || 0)}</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">RetryBW:</span> <span class="peer-metric-value">${(s.retry_bandwidth || 0).toFixed(2)}</span></div>
-                                <div class="peer-metric"><span class="peer-metric-label">RetryBuf:</span> <span class="peer-metric-value">${s.retry_buffer_size || 0}</span></div>
+                                <span class="peer-metric"><span class="peer-metric-label">Quality:</span> <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value">${(s.rtt || 0).toFixed(0)}ms</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value">${(s.avg_rtt || 0).toFixed(0)}ms</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value">${(s.bandwidth || 0).toFixed(2)} Mbps</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">Sent:</span> <span class="peer-metric-value">${formatNumber(s.sent || 0)}</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">ACKs:</span> <span class="peer-metric-value">${formatNumber(s.received || 0)}</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">Retx:</span> <span class="peer-metric-value" style="color: ${s.retransmitted > 0 ? 'var(--accent-orange)' : ''}">${formatNumber(s.retransmitted || 0)}</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">RetryBW:</span> <span class="peer-metric-value">${(s.retry_bandwidth || 0).toFixed(2)}</span></span>
+                                <span class="peer-metric"><span class="peer-metric-label">RetryBuf:</span> <span class="peer-metric-value">${s.retry_buffer_size || 0}</span></span>
                             </div>
                         </div>
                     `;
