@@ -6,7 +6,6 @@
     <title>Server Stats - RIST Gateway</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -130,7 +129,7 @@
         .stat-value {
             font-weight: 500;
             font-size: 13px;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Consolas', 'Monaco', monospace;
         }
 
         .stat-value.green { color: var(--accent-green); }
@@ -219,7 +218,7 @@
             animation: spin 1s linear infinite;
         }
 
-        /* Interface Cards - Improved Layout */
+        /* Interface Cards */
         .interface-card {
             background: var(--bg-card);
             border-radius: var(--card-radius);
@@ -247,11 +246,6 @@
 
         .interface-name svg {
             color: var(--accent-blue);
-        }
-
-        .interface-badges {
-            display: flex;
-            gap: 8px;
         }
 
         .interface-status {
@@ -296,7 +290,7 @@
         }
 
         .info-item .value {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
             font-weight: 500;
         }
@@ -326,7 +320,7 @@
         .bandwidth-box .rate {
             font-size: 1.5rem;
             font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Consolas', 'Monaco', monospace;
         }
 
         .bandwidth-box .rate.rx { color: var(--accent-green); }
@@ -342,6 +336,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 1rem;
+            margin-bottom: 1rem;
         }
 
         .packet-stat {
@@ -355,18 +350,51 @@
         }
 
         .packet-stat .value {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
             font-weight: 500;
         }
 
         .chart-container {
-            height: 200px;
-            margin-top: 1rem;
+            height: 180px;
             padding: 1rem;
             background: var(--bg-secondary);
             border-radius: 8px;
         }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .chart-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+        }
+
+        .chart-legend span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .chart-legend .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .chart-legend .dot.rx { background: var(--accent-green); }
+        .chart-legend .dot.tx { background: var(--accent-blue); }
 
         .section-title {
             font-size: 14px;
@@ -421,7 +449,7 @@
                     <path d="M23 4v6h-6M1 20v-6h6"/>
                     <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
                 </svg>
-                <span>Auto-refresh: 2s</span>
+                <span>Auto-refresh: 1s</span>
             </div>
         </div>
     </header>
@@ -572,9 +600,11 @@
 
     <script>
         const API_BASE = window.location.origin + '/api';
+        const HISTORY_LENGTH = 60;  // 60 seconds of history
         let pollInterval = null;
         let prevStats = {};
         let interfaceCharts = {};
+        let interfaceHistory = {};  // {iface: {rx: [], tx: []}}
 
         async function checkAuth() {
             try {
@@ -597,7 +627,7 @@
         }
 
         function formatBytesRate(bytes) {
-            if (bytes === 0) return '0 B/s';
+            if (!bytes || bytes <= 0) return '0 B/s';
             const k = 1024;
             const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
             const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
@@ -619,125 +649,58 @@
             return 'red';
         }
 
-        function createInterfaceChart(canvasId, interfaceName) {
+        function createInterfaceChart(canvasId) {
             const ctx = document.getElementById(canvasId);
             if (!ctx) return null;
 
-            const chart = new Chart(ctx, {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: {
+                            color: '#a0a0b0',
+                            font: { size: 10 },
+                            callback: function(value) {
+                                return formatBytesRate(value);
+                            }
+                        }
+                    }
+                },
+                elements: {
+                    point: { radius: 0 },
+                    line: { tension: 0.3, borderWidth: 2 }
+                },
+                animation: { duration: 0 }
+            };
+
+            return new Chart(ctx, {
                 type: 'line',
                 data: {
+                    labels: Array(HISTORY_LENGTH).fill(''),
                     datasets: [
                         {
                             label: 'RX',
                             data: [],
                             borderColor: '#22c55e',
                             backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 0,
-                            borderWidth: 2
+                            fill: true
                         },
                         {
                             label: 'TX',
                             data: [],
                             borderColor: '#3b82f6',
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 0,
-                            borderWidth: 2
+                            fill: true
                         }
                     ]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: {
-                                color: '#a0a0b0',
-                                usePointStyle: true,
-                                pointStyle: 'line',
-                                font: { size: 11 }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: '#1a1a24',
-                            titleColor: '#ffffff',
-                            bodyColor: '#a0a0b0',
-                            borderColor: '#2a2a3a',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function(context) {
-                                    return context.dataset.label + ': ' + formatBytesRate(context.raw.y);
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'minute',
-                                displayFormats: {
-                                    minute: 'HH:mm'
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(42, 42, 58, 0.5)'
-                            },
-                            ticks: {
-                                color: '#a0a0b0',
-                                font: { size: 10 },
-                                maxTicksLimit: 6
-                            }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(42, 42, 58, 0.5)'
-                            },
-                            ticks: {
-                                color: '#a0a0b0',
-                                font: { size: 10 },
-                                callback: function(value) {
-                                    return formatBytesRate(value);
-                                }
-                            }
-                        }
-                    }
-                }
+                options: chartOptions
             });
-
-            return chart;
-        }
-
-        async function loadHistory() {
-            try {
-                const response = await fetch(`${API_BASE}/system/interface-history?minutes=30`, { credentials: 'include' });
-                if (!response.ok) return;
-
-                const history = await response.json();
-
-                for (const [iface, points] of Object.entries(history)) {
-                    if (interfaceCharts[iface]) {
-                        const rxData = points.map(p => ({ x: p.timestamp * 1000, y: p.rx_rate }));
-                        const txData = points.map(p => ({ x: p.timestamp * 1000, y: p.tx_rate }));
-
-                        interfaceCharts[iface].data.datasets[0].data = rxData;
-                        interfaceCharts[iface].data.datasets[1].data = txData;
-                        interfaceCharts[iface].update('none');
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load history:', error);
-            }
         }
 
         async function loadStats() {
@@ -754,7 +717,7 @@
             } finally {
                 setTimeout(() => {
                     document.getElementById('refresh-icon').classList.remove('spinning');
-                }, 500);
+                }, 300);
             }
         }
 
@@ -838,6 +801,10 @@
             if (needsRebuild) {
                 interfacesDiv.innerHTML = entries.map(([name, iface]) => {
                     const canvasId = `chart-${name}`;
+                    // Initialize history for this interface
+                    if (!interfaceHistory[name]) {
+                        interfaceHistory[name] = { rx: [], tx: [] };
+                    }
                     return `
                         <div class="interface-card" id="iface-${name}">
                             <div class="interface-header">
@@ -850,11 +817,9 @@
                                     </svg>
                                     ${name}
                                 </span>
-                                <div class="interface-badges">
-                                    <span class="interface-status ${iface.is_up ? 'up' : 'down'}" id="status-${name}">
-                                        ${iface.is_up ? 'UP' : 'DOWN'}${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}
-                                    </span>
-                                </div>
+                                <span class="interface-status ${iface.is_up ? 'up' : 'down'}" id="status-${name}">
+                                    ${iface.is_up ? 'UP' : 'DOWN'}${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}
+                                </span>
                             </div>
 
                             <div class="interface-info">
@@ -913,7 +878,14 @@
                             </div>
 
                             <div class="chart-container">
-                                <canvas id="${canvasId}"></canvas>
+                                <div class="chart-header">
+                                    <span class="chart-title">Bandwidth History</span>
+                                    <div class="chart-legend">
+                                        <span><span class="dot rx"></span> RX</span>
+                                        <span><span class="dot tx"></span> TX</span>
+                                    </div>
+                                </div>
+                                <canvas id="${canvasId}" style="height: 140px;"></canvas>
                             </div>
                         </div>
                     `;
@@ -922,22 +894,36 @@
                 // Create charts for each interface
                 for (const [name] of entries) {
                     const canvasId = `chart-${name}`;
-                    interfaceCharts[name] = createInterfaceChart(canvasId, name);
+                    interfaceCharts[name] = createInterfaceChart(canvasId);
                 }
 
-                // Load historical data
-                loadHistory();
-            } else {
-                // Just update values
+                // Initialize prevStats
                 for (const [name, iface] of entries) {
+                    prevStats[name] = {
+                        bytes_recv: iface.bytes_recv,
+                        bytes_sent: iface.bytes_sent,
+                        timestamp: Date.now()
+                    };
+                }
+            } else {
+                // Update values
+                for (const [name, iface] of entries) {
+                    const now = Date.now();
+
                     // Calculate rates
                     let rxRate = 0, txRate = 0;
                     if (prevStats[name]) {
-                        const timeDiff = 2;
-                        rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
-                        txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
+                        const timeDiff = (now - prevStats[name].timestamp) / 1000;  // seconds
+                        if (timeDiff > 0) {
+                            rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
+                            txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
+                        }
                     }
-                    prevStats[name] = { bytes_recv: iface.bytes_recv, bytes_sent: iface.bytes_sent };
+                    prevStats[name] = {
+                        bytes_recv: iface.bytes_recv,
+                        bytes_sent: iface.bytes_sent,
+                        timestamp: now
+                    };
 
                     // Update DOM elements
                     const statusEl = document.getElementById(`status-${name}`);
@@ -976,19 +962,27 @@
                         dropsEl.style.color = iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit';
                     }
 
-                    // Update chart with new data point
-                    if (interfaceCharts[name] && rxRate > 0 || txRate > 0) {
-                        const now = Date.now();
-                        interfaceCharts[name].data.datasets[0].data.push({ x: now, y: rxRate });
-                        interfaceCharts[name].data.datasets[1].data.push({ x: now, y: txRate });
+                    // Update history and chart
+                    if (!interfaceHistory[name]) {
+                        interfaceHistory[name] = { rx: [], tx: [] };
+                    }
 
-                        // Keep only last 30 minutes
-                        const cutoff = now - (30 * 60 * 1000);
-                        interfaceCharts[name].data.datasets[0].data =
-                            interfaceCharts[name].data.datasets[0].data.filter(p => p.x >= cutoff);
-                        interfaceCharts[name].data.datasets[1].data =
-                            interfaceCharts[name].data.datasets[1].data.filter(p => p.x >= cutoff);
+                    // Push new data points
+                    interfaceHistory[name].rx.push(rxRate);
+                    interfaceHistory[name].tx.push(txRate);
 
+                    // Trim to max length
+                    if (interfaceHistory[name].rx.length > HISTORY_LENGTH) {
+                        interfaceHistory[name].rx.shift();
+                    }
+                    if (interfaceHistory[name].tx.length > HISTORY_LENGTH) {
+                        interfaceHistory[name].tx.shift();
+                    }
+
+                    // Update chart
+                    if (interfaceCharts[name]) {
+                        interfaceCharts[name].data.datasets[0].data = interfaceHistory[name].rx;
+                        interfaceCharts[name].data.datasets[1].data = interfaceHistory[name].tx;
                         interfaceCharts[name].update('none');
                     }
                 }
@@ -997,7 +991,7 @@
 
         function startPolling() {
             loadStats();
-            pollInterval = setInterval(loadStats, 2000);
+            pollInterval = setInterval(loadStats, 1000);  // Poll every 1 second
         }
 
         function stopPolling() {
