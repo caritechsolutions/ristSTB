@@ -63,7 +63,7 @@
             gap: 8px;
             color: var(--text-secondary);
             text-decoration: none;
-            font-size: 15px;
+            font-size: 14px;
             padding: 8px 12px;
             border-radius: 8px;
             transition: all 0.2s;
@@ -97,7 +97,7 @@
         }
 
         .stat-card h3 {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-secondary);
             margin-bottom: 1rem;
@@ -123,12 +123,12 @@
 
         .stat-label {
             color: var(--text-secondary);
-            font-size: 14px;
+            font-size: 13px;
         }
 
         .stat-value {
             font-weight: 500;
-            font-size: 14px;
+            font-size: 13px;
             font-family: 'Consolas', 'Monaco', monospace;
         }
 
@@ -150,7 +150,7 @@
 
         .big-stat-label {
             color: var(--text-secondary);
-            font-size: 13px;
+            font-size: 12px;
             margin-top: 4px;
         }
 
@@ -188,17 +188,17 @@
         }
 
         .cpu-core-num {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-secondary);
         }
 
         .cpu-core-value {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
         }
 
         .uptime {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
         }
 
@@ -206,7 +206,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
         }
 
@@ -238,7 +238,7 @@
 
         .interface-name {
             font-weight: 600;
-            font-size: 17px;
+            font-size: 16px;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -252,7 +252,7 @@
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 500;
             padding: 4px 10px;
             border-radius: 12px;
@@ -282,7 +282,7 @@
         }
 
         .info-item .label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
             margin-bottom: 4px;
             text-transform: uppercase;
@@ -291,7 +291,7 @@
 
         .info-item .value {
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
         }
 
@@ -310,7 +310,7 @@
         }
 
         .bandwidth-box .direction {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -327,7 +327,7 @@
         .bandwidth-box .rate.tx { color: var(--accent-blue); }
 
         .bandwidth-box .total {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
             margin-top: 4px;
         }
@@ -345,13 +345,13 @@
         }
 
         .packet-stat .label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
         }
 
         .packet-stat .value {
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
         }
 
@@ -370,7 +370,7 @@
         }
 
         .chart-title {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
             text-transform: uppercase;
         }
@@ -378,7 +378,7 @@
         .chart-legend {
             display: flex;
             gap: 16px;
-            font-size: 12px;
+            font-size: 11px;
         }
 
         .chart-legend span {
@@ -397,7 +397,7 @@
         .chart-legend .dot.tx { background: var(--accent-blue); }
 
         .section-title {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-secondary);
             margin-bottom: 1rem;
@@ -600,10 +600,14 @@
 
     <script>
         const API_BASE = window.location.origin + '/api';
-        const HISTORY_LENGTH = 300;  // 5 minutes of history (300 seconds)
+        const HISTORY_LENGTH = 120;  // 1 hour of history (120 points at 30 sec intervals)
+        const POLL_INTERVAL = 2000;  // 2 seconds for live data
+        const GRAPH_UPDATE_INTERVAL = 30000;  // 30 seconds for graph updates
         let pollInterval = null;
+        let graphUpdateInterval = null;
+        let lastGraphUpdate = 0;
         let interfaceCharts = {};
-        let interfaceHistory = {};  // {iface: {rx: [], tx: []}}
+        let interfaceHistory = {};  // {iface: {timestamps: [], rx: [], tx: []}}
 
         async function checkAuth() {
             try {
@@ -809,8 +813,6 @@
             const interfacesDiv = document.getElementById('interfaces');
             const entries = Object.entries(interfaces);
 
-            console.log('updateInterfaces called, entries:', entries.length, 'interfaceHistory keys:', Object.keys(interfaceHistory));
-
             if (entries.length === 0) {
                 interfacesDiv.innerHTML = '<p style="color: var(--text-secondary)">No network interfaces found</p>';
                 return;
@@ -915,22 +917,17 @@
                 }).join('');
 
                 // Create charts for each interface and populate with historical data
-                console.log('Creating charts for interfaces, needsRebuild=true');
                 for (const [name] of entries) {
                     const canvasId = `chart-${name}`;
-                    console.log(`Creating chart for ${name}, canvas exists:`, !!document.getElementById(canvasId));
                     interfaceCharts[name] = createInterfaceChart(canvasId);
 
                     // If we have historical data, populate the chart with timestamps
                     if (interfaceHistory[name] && interfaceCharts[name]) {
                         const hist = interfaceHistory[name];
-                        console.log(`Loading ${hist.rx.length} historical points for ${name}`);
                         interfaceCharts[name].data.labels = (hist.timestamps || []).map(t => formatTime(t));
                         interfaceCharts[name].data.datasets[0].data = [...hist.rx];
                         interfaceCharts[name].data.datasets[1].data = [...hist.tx];
                         interfaceCharts[name].update('none');
-                    } else {
-                        console.log(`No historical data for ${name}, available:`, Object.keys(interfaceHistory));
                     }
                 }
             } else {
@@ -977,29 +974,38 @@
                         dropsEl.style.color = iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit';
                     }
 
-                    // Update history and chart
+                    // Store latest rate for graph updates (done separately every 30 sec)
                     if (!interfaceHistory[name]) {
-                        interfaceHistory[name] = { timestamps: [], rx: [], tx: [] };
+                        interfaceHistory[name] = { timestamps: [], rx: [], tx: [], latestRx: 0, latestTx: 0 };
                     }
+                    interfaceHistory[name].latestRx = rxRate;
+                    interfaceHistory[name].latestTx = txRate;
+                }
+            }
+        }
 
-                    // Push new data points with current timestamp
-                    const now = Date.now() / 1000;
-                    interfaceHistory[name].timestamps.push(now);
-                    interfaceHistory[name].rx.push(rxRate);
-                    interfaceHistory[name].tx.push(txRate);
+        function updateGraphs() {
+            // Add current data point to graph history (called every 30 seconds)
+            const now = Date.now() / 1000;
+
+            for (const [name, hist] of Object.entries(interfaceHistory)) {
+                if (hist.latestRx !== undefined) {
+                    hist.timestamps.push(now);
+                    hist.rx.push(hist.latestRx);
+                    hist.tx.push(hist.latestTx);
 
                     // Trim to max length
-                    while (interfaceHistory[name].timestamps.length > HISTORY_LENGTH) {
-                        interfaceHistory[name].timestamps.shift();
-                        interfaceHistory[name].rx.shift();
-                        interfaceHistory[name].tx.shift();
+                    while (hist.timestamps.length > HISTORY_LENGTH) {
+                        hist.timestamps.shift();
+                        hist.rx.shift();
+                        hist.tx.shift();
                     }
 
-                    // Update chart with timestamps as labels
+                    // Update chart
                     if (interfaceCharts[name]) {
-                        interfaceCharts[name].data.labels = interfaceHistory[name].timestamps.map(t => formatTime(t));
-                        interfaceCharts[name].data.datasets[0].data = interfaceHistory[name].rx;
-                        interfaceCharts[name].data.datasets[1].data = interfaceHistory[name].tx;
+                        interfaceCharts[name].data.labels = hist.timestamps.map(t => formatTime(t));
+                        interfaceCharts[name].data.datasets[0].data = hist.rx;
+                        interfaceCharts[name].data.datasets[1].data = hist.tx;
                         interfaceCharts[name].update('none');
                     }
                 }
@@ -1008,28 +1014,33 @@
 
         async function loadHistoricalData() {
             try {
-                // Load last 5 minutes of history (matches HISTORY_LENGTH)
-                const response = await fetch(`${API_BASE}/system/interface-history?minutes=5`, {
+                // Load last 60 minutes of history
+                const response = await fetch(`${API_BASE}/system/interface-history?minutes=60`, {
                     credentials: 'include'
                 });
                 if (!response.ok) return;
 
                 const data = await response.json();
 
-                // Populate interfaceHistory from backend data
+                // Populate interfaceHistory from backend data (downsample to ~30 sec intervals)
                 for (const [iface, points] of Object.entries(data)) {
                     if (!interfaceHistory[iface]) {
-                        interfaceHistory[iface] = { timestamps: [], rx: [], tx: [] };
+                        interfaceHistory[iface] = { timestamps: [], rx: [], tx: [], latestRx: 0, latestTx: 0 };
+                    }
+
+                    // Downsample: take every 30th point (since backend stores 1/sec)
+                    const downsampled = [];
+                    for (let i = 0; i < points.length; i += 30) {
+                        downsampled.push(points[i]);
                     }
 
                     // Take last HISTORY_LENGTH points
-                    const recentPoints = points.slice(-HISTORY_LENGTH);
+                    const recentPoints = downsampled.slice(-HISTORY_LENGTH);
                     interfaceHistory[iface].timestamps = recentPoints.map(p => p.timestamp || 0);
                     interfaceHistory[iface].rx = recentPoints.map(p => p.rx_rate || 0);
                     interfaceHistory[iface].tx = recentPoints.map(p => p.tx_rate || 0);
                 }
 
-                console.log('Loaded historical data for interfaces:', Object.keys(data), 'points:', Object.fromEntries(Object.entries(data).map(([k,v]) => [k, v.length])));
             } catch (error) {
                 console.error('Failed to load historical data:', error);
             }
@@ -1037,13 +1048,19 @@
 
         function startPolling() {
             loadStats();
-            pollInterval = setInterval(loadStats, 1000);  // Poll every 1 second
+            updateGraphs();  // Initial graph update
+            pollInterval = setInterval(loadStats, POLL_INTERVAL);  // Poll every 2 seconds for live data
+            graphUpdateInterval = setInterval(updateGraphs, GRAPH_UPDATE_INTERVAL);  // Update graph every 30 seconds
         }
 
         function stopPolling() {
             if (pollInterval) {
                 clearInterval(pollInterval);
                 pollInterval = null;
+            }
+            if (graphUpdateInterval) {
+                clearInterval(graphUpdateInterval);
+                graphUpdateInterval = null;
             }
         }
 

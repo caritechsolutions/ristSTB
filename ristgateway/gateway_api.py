@@ -65,7 +65,7 @@ _gateway_locks: Dict[str, asyncio.Lock] = {}  # per-gateway async locks (lazy-in
 _cpu_tracking: Dict[str, Dict] = {}  # {gateway_id: {usage_usec, timestamp, cpu_percent}}
 
 # Interface bandwidth history (for server stats page)
-INTERFACE_HISTORY_SIZE = 1800  # 30 minutes at 1 sample per second
+INTERFACE_HISTORY_SIZE = 3600  # 1 hour at 1 sample per second
 INTERFACE_HISTORY_FILE = '/var/lib/ristgateway/interface_history.json'
 interface_history: Dict[str, deque] = {}  # {interface_name: deque of {timestamp, rx_bytes, tx_bytes}}
 interface_prev_stats: Dict[str, Dict] = {}  # Previous stats for rate calculation
@@ -1906,10 +1906,10 @@ def system_info():
     }
 
 @app.get("/api/system/interface-history", dependencies=[Depends(auth_required)])
-def get_interface_history(minutes: int = 30):
+def get_interface_history(minutes: int = 60):
     """Get interface bandwidth history for graphing"""
-    # Limit to max 30 minutes (1800 seconds)
-    minutes = min(minutes, 30)
+    # Limit to max 60 minutes (3600 seconds)
+    minutes = min(minutes, 60)
     cutoff = time.time() - (minutes * 60)
 
     result = {}
