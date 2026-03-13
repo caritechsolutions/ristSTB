@@ -293,21 +293,21 @@
         }
 
         .peer-metrics {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-            gap: 12px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 16px;
             color: var(--text-secondary);
             font-size: 11px;
         }
 
         .peer-metric {
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            align-items: center;
+            gap: 4px;
         }
 
-        .peer-metric-value { color: var(--text-primary); font-weight: 600; font-size: 12px; }
-        .peer-metric-label { font-size: 9px; text-transform: uppercase; }
+        .peer-metric-value { color: var(--text-primary); font-weight: 600; }
+        .peer-metric-label { font-size: 10px; text-transform: uppercase; color: var(--text-secondary); }
 
         .stats-grid {
             display: grid;
@@ -867,34 +867,12 @@
                             <div class="peer-id">Peer ID: <span id="peer-id-${i}">-</span></div>
                         </div>
                         <div class="peer-metrics">
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-rtt-${i}">-</span>
-                                <span class="peer-metric-label">RTT</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-avg-rtt-${i}">-</span>
-                                <span class="peer-metric-label">Avg RTT</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-bw-${i}">-</span>
-                                <span class="peer-metric-label">Bitrate</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-avg-bw-${i}">-</span>
-                                <span class="peer-metric-label">Avg BW</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-rx-data-${i}">-</span>
-                                <span class="peer-metric-label">RX Data</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-rx-rtcp-${i}">-</span>
-                                <span class="peer-metric-label">RX RTCP</span>
-                            </div>
-                            <div class="peer-metric">
-                                <span class="peer-metric-value" id="peer-tx-rtcp-${i}">-</span>
-                                <span class="peer-metric-label">TX RTCP</span>
-                            </div>
+                            <div class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value" id="peer-rtt-${i}">-</span></div>
+                            <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-rtt-${i}">-</span></div>
+                            <div class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value" id="peer-bw-${i}">-</span></div>
+                            <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value" id="peer-avg-bw-${i}">-</span></div>
+                            <div class="peer-metric"><span class="peer-metric-label">RX:</span> <span class="peer-metric-value" id="peer-rx-data-${i}">-</span></div>
+                            <div class="peer-metric"><span class="peer-metric-label">RTCP:</span> <span class="peer-metric-value" id="peer-rx-rtcp-${i}">-</span>/<span id="peer-tx-rtcp-${i}">-</span></div>
                         </div>
                     </div>
                 `).join('');
@@ -919,42 +897,15 @@
                                 <div class="peer-id">ID: ${s.id} | Type: ${s.type || 'data'}</div>
                             </div>
                             <div class="peer-metrics">
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span>
-                                    <span class="peer-metric-label">Quality</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${(s.rtt || 0).toFixed(0)}ms</span>
-                                    <span class="peer-metric-label">RTT</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${(s.avg_rtt || 0).toFixed(0)}ms</span>
-                                    <span class="peer-metric-label">Avg RTT</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${(s.bandwidth || 0).toFixed(2)}</span>
-                                    <span class="peer-metric-label">BW Mbps</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${formatNumber(s.sent || 0)}</span>
-                                    <span class="peer-metric-label">Sent</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${formatNumber(s.received || 0)}</span>
-                                    <span class="peer-metric-label">ACKs</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value" style="color: ${s.retransmitted > 0 ? 'var(--accent-orange)' : ''}">${formatNumber(s.retransmitted || 0)}</span>
-                                    <span class="peer-metric-label">Retx</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${(s.retry_bandwidth || 0).toFixed(2)}</span>
-                                    <span class="peer-metric-label">Retry BW</span>
-                                </div>
-                                <div class="peer-metric">
-                                    <span class="peer-metric-value">${s.retry_buffer_size || 0}</span>
-                                    <span class="peer-metric-label">Retry Buf</span>
-                                </div>
+                                <div class="peer-metric"><span class="peer-metric-label">Quality:</span> <span class="peer-metric-value" style="color: ${qualityColor}">${s.quality}%</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">RTT:</span> <span class="peer-metric-value">${(s.rtt || 0).toFixed(0)}ms</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">Avg:</span> <span class="peer-metric-value">${(s.avg_rtt || 0).toFixed(0)}ms</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">BW:</span> <span class="peer-metric-value">${(s.bandwidth || 0).toFixed(2)} Mbps</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">Sent:</span> <span class="peer-metric-value">${formatNumber(s.sent || 0)}</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">ACKs:</span> <span class="peer-metric-value">${formatNumber(s.received || 0)}</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">Retx:</span> <span class="peer-metric-value" style="color: ${s.retransmitted > 0 ? 'var(--accent-orange)' : ''}">${formatNumber(s.retransmitted || 0)}</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">RetryBW:</span> <span class="peer-metric-value">${(s.retry_bandwidth || 0).toFixed(2)}</span></div>
+                                <div class="peer-metric"><span class="peer-metric-label">RetryBuf:</span> <span class="peer-metric-value">${s.retry_buffer_size || 0}</span></div>
                             </div>
                         </div>
                     `;
