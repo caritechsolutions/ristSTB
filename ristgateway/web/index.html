@@ -408,6 +408,18 @@
             min-width: 50px;
         }
 
+        .channel-bandwidth {
+            font-size: 12px;
+            font-weight: 500;
+            min-width: 85px;
+            color: var(--accent-blue);
+            font-family: monospace;
+        }
+
+        .channel-bandwidth.inactive {
+            color: var(--text-secondary);
+        }
+
         .channel-io {
             display: flex;
             gap: 16px;
@@ -900,10 +912,28 @@
             return { class: 'critical', text: q + '%', value: q };
         }
 
+        // Format bandwidth for display
+        function formatBandwidth(bps) {
+            if (!bps || bps <= 0) return '-';
+            const mbps = bps / 1000000;
+            if (mbps >= 1) return mbps.toFixed(1) + ' Mbps';
+            const kbps = bps / 1000;
+            return kbps.toFixed(0) + ' Kbps';
+        }
+
+        // Get bandwidth info for channel
+        function getBandwidthInfo(id, gw) {
+            if (!gw.running) return { text: '-', active: false };
+            const stats = gatewayStats[id];
+            if (!stats || !stats.bandwidth) return { text: '-', active: false };
+            return { text: formatBandwidth(stats.bandwidth), active: stats.bandwidth > 0 };
+        }
+
         // Render single channel row
         function renderChannelRow(id, gw) {
             const isRunning = gw.running;
             const quality = getQualityInfo(id, gw);
+            const bandwidth = getBandwidthInfo(id, gw);
             const inputs = gw.inputs || [];
             const outputs = gw.outputs || [];
 
@@ -918,6 +948,7 @@
                     <div class="channel-name">${escapeHtml(gw.name || id)}</div>
                     <div class="channel-id">${id}</div>
                     <div class="channel-quality" style="color: var(--accent-${quality.class === 'excellent' ? 'green' : quality.class === 'good' ? 'green' : quality.class === 'warning' ? 'orange' : quality.class === 'critical' ? 'red' : 'text-secondary'})">${quality.text}</div>
+                    <div class="channel-bandwidth ${bandwidth.active ? '' : 'inactive'}" title="Input Bandwidth">${bandwidth.text}</div>
                     <div class="channel-io">
                         <span>&#8595; ${inputs.length} in</span>
                         <span>&#8593; ${outputs.length} out</span>
