@@ -8,7 +8,7 @@ channels:
     status: "stopped"
     process_id: null
     last_error: null
-    metrics_port: 9101
+    metrics_port: 6001
 
     # UDP Input
     input: "udp://224.100.100.5:59606"

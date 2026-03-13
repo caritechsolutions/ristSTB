@@ -118,12 +118,12 @@ def get_next_channel_id(config: dict) -> str:
     return f'channel{next_num}'
 
 def get_next_metrics_port(config: dict) -> int:
-    """Find next available metrics port starting from 9101"""
+    """Find next available metrics port starting from 6001"""
     used_ports = set()
     for ch in config.get('channels', {}).values():
         if ch.get('metrics_port'):
             used_ports.add(ch['metrics_port'])
-    port = 9101
+    port = 6001
     while port in used_ports:
         port += 1
     return port
