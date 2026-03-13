@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Stats - RIST Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --border-color: #2a2a3a;
+            --card-radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .page-title { font-size: 1.25rem; font-weight: 600; }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-card h3 svg {
+            color: var(--accent-blue);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .stat-value {
+            font-weight: 500;
+            font-size: 13px;
+            font-family: monospace;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.red { color: var(--accent-red); }
+
+        .big-stat {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .big-stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .big-stat-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+
+        .progress-fill.green { background: var(--accent-green); }
+        .progress-fill.blue { background: var(--accent-blue); }
+        .progress-fill.orange { background: var(--accent-orange); }
+        .progress-fill.red { background: var(--accent-red); }
+
+        .interface-card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 12px;
+        }
+
+        .interface-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .interface-name {
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .interface-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .interface-status.up {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .interface-status.down {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .interface-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .interface-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .interface-stat .label {
+            color: var(--text-secondary);
+        }
+
+        .interface-stat .value {
+            font-family: monospace;
+        }
+
+        .cpu-cores {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .cpu-core {
+            text-align: center;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+
+        .cpu-core-num {
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        .cpu-core-value {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .uptime {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .refresh-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinning {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <a href="/" class="back-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back
+                </a>
+                <div>
+                    <div class="page-title">Server Statistics</div>
+                    <div class="uptime" id="uptime">Uptime: -</div>
+                </div>
+            </div>
+            <div class="refresh-indicator">
+                <svg id="refresh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                <span>Auto-refresh: 2s</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="stats-grid">
+            <!-- System Info -->
+            <div class="stat-card">
+                <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    System Information
+                </h3>
+                <div class="stat-row">
+                    <span class="stat-label">Hostname</span>
+                    <span class="stat-value" id="hostname">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Platform</span>
+                    <span class="stat-value" id="platform">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Kernel</span>
+                    <span class="stat-value" id="kernel">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Architecture</span>
+                    <span class="stat-value" id="arch">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Load Average</span>
+                    <span class="stat-value" id="load-avg">-</span>
+                </div>
+            </div>
+
+            <!-- CPU -->
+            <div class="stat-card">
+                <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
+                        <rect x="9" y="9" width="6" height="6"/>
+                        <line x1="9" y1="1" x2="9" y2="4"/>
+                        <line x1="15" y1="1" x2="15" y2="4"/>
+                        <line x1="9" y1="20" x2="9" y2="23"/>
+                        <line x1="15" y1="20" x2="15" y2="23"/>
+                        <line x1="20" y1="9" x2="23" y2="9"/>
+                        <line x1="20" y1="14" x2="23" y2="14"/>
+                        <line x1="1" y1="9" x2="4" y2="9"/>
+                        <line x1="1" y1="14" x2="4" y2="14"/>
+                    </svg>
+                    CPU
+                </h3>
+                <div class="big-stat">
+                    <div class="big-stat-value" id="cpu-percent">0%</div>
+                    <div class="big-stat-label" id="cpu-info">- cores</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="cpu-bar" style="width: 0%"></div>
+                </div>
+                <div class="cpu-cores" id="cpu-cores"></div>
+            </div>
+
+            <!-- Memory -->
+            <div class="stat-card">
+                <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 5a2 2 0 012-2h16a2 2 0 012 2v14a2 2 0 01-2 2H4a2 2 0 01-2-2V5z"/>
+                        <path d="M6 8h4M6 12h4M6 16h4"/>
+                    </svg>
+                    Memory
+                </h3>
+                <div class="big-stat">
+                    <div class="big-stat-value" id="mem-percent">0%</div>
+                    <div class="big-stat-label" id="mem-info">-</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill blue" id="mem-bar" style="width: 0%"></div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div class="stat-row">
+                        <span class="stat-label">Total</span>
+                        <span class="stat-value" id="mem-total">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Used</span>
+                        <span class="stat-value" id="mem-used">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Available</span>
+                        <span class="stat-value green" id="mem-available">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Swap Used</span>
+                        <span class="stat-value" id="swap-used">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Disk -->
+            <div class="stat-card">
+                <h3>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                    </svg>
+                    Disk (/)
+                </h3>
+                <div class="big-stat">
+                    <div class="big-stat-value" id="disk-percent">0%</div>
+                    <div class="big-stat-label" id="disk-info">-</div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill orange" id="disk-bar" style="width: 0%"></div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div class="stat-row">
+                        <span class="stat-label">Total</span>
+                        <span class="stat-value" id="disk-total">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Used</span>
+                        <span class="stat-value" id="disk-used">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Free</span>
+                        <span class="stat-value green" id="disk-free">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Network Interfaces -->
+        <div class="stat-card">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                Network Interfaces
+            </h3>
+            <div id="interfaces"></div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        let pollInterval = null;
+        let prevStats = {};
+
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/status`, { credentials: 'include' });
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatBytesRate(bytes) {
+            if (bytes === 0) return '0 B/s';
+            const k = 1024;
+            const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}d ${hours}h ${mins}m`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
+        }
+
+        function getProgressColor(percent) {
+            if (percent < 60) return 'green';
+            if (percent < 85) return 'orange';
+            return 'red';
+        }
+
+        async function loadStats() {
+            document.getElementById('refresh-icon').classList.add('spinning');
+
+            try {
+                const response = await fetch(`${API_BASE}/system/info`, { credentials: 'include' });
+                if (!response.ok) throw new Error('Failed to load stats');
+
+                const data = await response.json();
+                updateDisplay(data);
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            } finally {
+                setTimeout(() => {
+                    document.getElementById('refresh-icon').classList.remove('spinning');
+                }, 500);
+            }
+        }
+
+        function updateDisplay(data) {
+            // System Info
+            document.getElementById('hostname').textContent = data.hostname;
+            document.getElementById('platform').textContent = data.platform;
+            document.getElementById('kernel').textContent = data.platform_release;
+            document.getElementById('arch').textContent = data.architecture;
+            document.getElementById('load-avg').textContent =
+                `${data.load_average['1min'].toFixed(2)} / ${data.load_average['5min'].toFixed(2)} / ${data.load_average['15min'].toFixed(2)}`;
+            document.getElementById('uptime').textContent = `Uptime: ${formatUptime(data.uptime_seconds)}`;
+
+            // CPU
+            const cpuPercent = data.cpu.percent;
+            document.getElementById('cpu-percent').textContent = cpuPercent.toFixed(1) + '%';
+            document.getElementById('cpu-info').textContent =
+                `${data.cpu.cores_physical} cores / ${data.cpu.cores_logical} threads @ ${(data.cpu.frequency_mhz/1000).toFixed(2)} GHz`;
+
+            const cpuBar = document.getElementById('cpu-bar');
+            cpuBar.style.width = cpuPercent + '%';
+            cpuBar.className = 'progress-fill ' + getProgressColor(cpuPercent);
+
+            // CPU cores
+            const coresDiv = document.getElementById('cpu-cores');
+            coresDiv.innerHTML = data.cpu.percent_per_core.map((p, i) => `
+                <div class="cpu-core">
+                    <div class="cpu-core-num">Core ${i}</div>
+                    <div class="cpu-core-value" style="color: var(--accent-${getProgressColor(p)})">${p.toFixed(0)}%</div>
+                </div>
+            `).join('');
+
+            // Memory
+            const memPercent = data.memory.percent;
+            document.getElementById('mem-percent').textContent = memPercent.toFixed(1) + '%';
+            document.getElementById('mem-info').textContent =
+                `${formatBytes(data.memory.used)} / ${formatBytes(data.memory.total)}`;
+
+            const memBar = document.getElementById('mem-bar');
+            memBar.style.width = memPercent + '%';
+            memBar.className = 'progress-fill ' + getProgressColor(memPercent);
+
+            document.getElementById('mem-total').textContent = formatBytes(data.memory.total);
+            document.getElementById('mem-used').textContent = formatBytes(data.memory.used);
+            document.getElementById('mem-available').textContent = formatBytes(data.memory.available);
+            document.getElementById('swap-used').textContent =
+                `${formatBytes(data.swap.used)} / ${formatBytes(data.swap.total)} (${data.swap.percent.toFixed(1)}%)`;
+
+            // Disk
+            const diskPercent = data.disk.percent;
+            document.getElementById('disk-percent').textContent = diskPercent.toFixed(1) + '%';
+            document.getElementById('disk-info').textContent =
+                `${formatBytes(data.disk.used)} / ${formatBytes(data.disk.total)}`;
+
+            const diskBar = document.getElementById('disk-bar');
+            diskBar.style.width = diskPercent + '%';
+            diskBar.className = 'progress-fill ' + getProgressColor(diskPercent);
+
+            document.getElementById('disk-total').textContent = formatBytes(data.disk.total);
+            document.getElementById('disk-used').textContent = formatBytes(data.disk.used);
+            document.getElementById('disk-free').textContent = formatBytes(data.disk.free);
+
+            // Network Interfaces
+            const interfacesDiv = document.getElementById('interfaces');
+            const interfaces = Object.entries(data.interfaces);
+
+            if (interfaces.length === 0) {
+                interfacesDiv.innerHTML = '<p style="color: var(--text-secondary)">No network interfaces found</p>';
+            } else {
+                interfacesDiv.innerHTML = interfaces.map(([name, iface]) => {
+                    // Calculate rates
+                    let rxRate = 0, txRate = 0;
+                    if (prevStats[name]) {
+                        const timeDiff = 2; // 2 seconds
+                        rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
+                        txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
+                    }
+                    prevStats[name] = { bytes_recv: iface.bytes_recv, bytes_sent: iface.bytes_sent };
+
+                    return `
+                        <div class="interface-card">
+                            <div class="interface-header">
+                                <span class="interface-name">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                                        <line x1="6" y1="6" x2="6.01" y2="6"/>
+                                        <line x1="6" y1="18" x2="6.01" y2="18"/>
+                                    </svg>
+                                    ${name}
+                                </span>
+                                <span class="interface-status ${iface.is_up ? 'up' : 'down'}">
+                                    ${iface.is_up ? 'UP' : 'DOWN'}
+                                    ${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}
+                                </span>
+                            </div>
+                            <div class="interface-stats">
+                                <div class="interface-stat">
+                                    <span class="label">IPv4</span>
+                                    <span class="value">${iface.ipv4 || '-'}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">MAC</span>
+                                    <span class="value">${iface.mac || '-'}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">RX Total</span>
+                                    <span class="value">${formatBytes(iface.bytes_recv)}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">TX Total</span>
+                                    <span class="value">${formatBytes(iface.bytes_sent)}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">RX Rate</span>
+                                    <span class="value" style="color: var(--accent-green)">${formatBytesRate(rxRate)}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">TX Rate</span>
+                                    <span class="value" style="color: var(--accent-blue)">${formatBytesRate(txRate)}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">Packets RX</span>
+                                    <span class="value">${iface.packets_recv.toLocaleString()}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">Packets TX</span>
+                                    <span class="value">${iface.packets_sent.toLocaleString()}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">Errors In/Out</span>
+                                    <span class="value" style="color: ${iface.errors_in + iface.errors_out > 0 ? 'var(--accent-red)' : 'inherit'}">${iface.errors_in} / ${iface.errors_out}</span>
+                                </div>
+                                <div class="interface-stat">
+                                    <span class="label">Drops In/Out</span>
+                                    <span class="value" style="color: ${iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit'}">${iface.drops_in} / ${iface.drops_out}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function startPolling() {
+            loadStats();
+            pollInterval = setInterval(loadStats, 2000);
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            startPolling();
+        });
+
+        window.addEventListener('beforeunload', stopPolling);
+    </script>
+</body>
+</html>

@@ -1659,6 +1659,117 @@ def system_metrics():
         }
     }
 
+@app.get("/api/system/info", dependencies=[Depends(auth_required)])
+def system_info():
+    """Get detailed system information"""
+    import platform
+
+    # CPU info
+    cpu_count = psutil.cpu_count(logical=False) or 1
+    cpu_count_logical = psutil.cpu_count(logical=True) or 1
+    cpu_freq = psutil.cpu_freq()
+    cpu_percent_per_core = psutil.cpu_percent(interval=0.1, percpu=True)
+
+    # Memory
+    memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+
+    # Disk
+    disk = psutil.disk_usage('/')
+
+    # Network interfaces
+    net_if_addrs = psutil.net_if_addrs()
+    net_if_stats = psutil.net_if_stats()
+    net_io_counters = psutil.net_io_counters(pernic=True)
+
+    interfaces = {}
+    for iface, addrs in net_if_addrs.items():
+        if iface.startswith('lo') or iface.startswith('docker') or iface.startswith('br-') or iface.startswith('veth'):
+            continue
+
+        stats = net_if_stats.get(iface, None)
+        io = net_io_counters.get(iface, None)
+
+        ipv4 = None
+        ipv6 = None
+        mac = None
+        for addr in addrs:
+            if addr.family.name == 'AF_INET':
+                ipv4 = addr.address
+            elif addr.family.name == 'AF_INET6' and not addr.address.startswith('fe80'):
+                ipv6 = addr.address
+            elif addr.family.name == 'AF_PACKET':
+                mac = addr.address
+
+        interfaces[iface] = {
+            'ipv4': ipv4,
+            'ipv6': ipv6,
+            'mac': mac,
+            'is_up': stats.isup if stats else False,
+            'speed': stats.speed if stats else 0,
+            'mtu': stats.mtu if stats else 0,
+            'bytes_sent': io.bytes_sent if io else 0,
+            'bytes_recv': io.bytes_recv if io else 0,
+            'packets_sent': io.packets_sent if io else 0,
+            'packets_recv': io.packets_recv if io else 0,
+            'errors_in': io.errin if io else 0,
+            'errors_out': io.errout if io else 0,
+            'drops_in': io.dropin if io else 0,
+            'drops_out': io.dropout if io else 0
+        }
+
+    # System uptime
+    boot_time = psutil.boot_time()
+    uptime_seconds = time.time() - boot_time
+
+    # Load average (Linux)
+    try:
+        load_avg = os.getloadavg()
+    except:
+        load_avg = (0, 0, 0)
+
+    return {
+        "hostname": os.uname().nodename,
+        "platform": platform.system(),
+        "platform_release": platform.release(),
+        "platform_version": platform.version(),
+        "architecture": platform.machine(),
+        "uptime_seconds": uptime_seconds,
+        "load_average": {
+            "1min": load_avg[0],
+            "5min": load_avg[1],
+            "15min": load_avg[2]
+        },
+        "cpu": {
+            "cores_physical": cpu_count,
+            "cores_logical": cpu_count_logical,
+            "frequency_mhz": cpu_freq.current if cpu_freq else 0,
+            "frequency_max_mhz": cpu_freq.max if cpu_freq else 0,
+            "percent": psutil.cpu_percent(interval=0),
+            "percent_per_core": cpu_percent_per_core
+        },
+        "memory": {
+            "total": memory.total,
+            "available": memory.available,
+            "used": memory.used,
+            "percent": memory.percent
+        },
+        "swap": {
+            "total": swap.total,
+            "used": swap.used,
+            "free": swap.free,
+            "percent": swap.percent
+        },
+        "disk": {
+            "total": disk.total,
+            "used": disk.used,
+            "free": disk.free,
+            "percent": disk.percent
+        },
+        "interfaces": interfaces,
+        "timestamp": datetime.now().isoformat()
+    }
+
 # =============================================================================
 # Config Backup/Restore Endpoints
 # =============================================================================
@@ -1922,6 +2033,14 @@ async def stats_page(gateway_id: str):
     if os.path.exists(stats_path):
         return FileResponse(stats_path)
     return HTMLResponse("<h1>Gateway Stats</h1><p>Stats page not found.</p>")
+
+@app.get("/server")
+async def server_stats_page():
+    """Serve server stats page"""
+    server_path = os.path.join(WEB_DIR, 'server.html')
+    if os.path.exists(server_path):
+        return FileResponse(server_path)
+    return HTMLResponse("<h1>Server Stats</h1><p>Server stats page not found.</p>")
 
 # Mount static files
 if os.path.exists(WEB_DIR):
