@@ -600,7 +600,7 @@
 
     <script>
         const API_BASE = window.location.origin + '/api';
-        const HISTORY_LENGTH = 60;  // 60 seconds of history
+        const HISTORY_LENGTH = 300;  // 5 minutes of history (300 seconds)
         let pollInterval = null;
         let interfaceCharts = {};
         let interfaceHistory = {};  // {iface: {rx: [], tx: []}}
@@ -1001,8 +1001,8 @@
 
         async function loadHistoricalData() {
             try {
-                // Load last 60 seconds of history (matches HISTORY_LENGTH)
-                const response = await fetch(`${API_BASE}/system/interface-history?minutes=1`, {
+                // Load last 5 minutes of history (matches HISTORY_LENGTH)
+                const response = await fetch(`${API_BASE}/system/interface-history?minutes=5`, {
                     credentials: 'include'
                 });
                 if (!response.ok) return;
