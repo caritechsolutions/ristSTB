@@ -54,15 +54,13 @@ timeout 5 curl -s -b /tmp/cookies.txt http://localhost/api/gateways/gateway1/sta
 
 ## Stats Architecture
 
-**In-Memory Stats (no disk I/O):**
-- Background `stats_poller_thread` runs every 2 seconds in the API
-- Polls journalctl for RIST stats, stores in `gateway_stats` dict
-- API endpoint reads from memory (instant, scales to 1000s of channels)
-- When gateway stops, stats are zeroed out (no stale data)
+**Shared Memory Stats (no disk I/O):**
+- Stats collector service writes to `/dev/shm/ristgateway-stats/` (tmpfs/RAM)
+- API reads from shared memory files (fast, scales to 1000s of channels)
+- No disk writes - everything in RAM
+- Simple, reliable architecture
 
 **Resource tracking:**
 - Service status via cgroup filesystem (`/sys/fs/cgroup/system.slice/`)
 - CPU percentage from `cpu.stat` usage_usec deltas
 - Memory from `memory.current` in cgroup
-
-**Note:** Old `ristgateway-stats.service` and `/tmp/ristgateway-stats/` files are no longer used.

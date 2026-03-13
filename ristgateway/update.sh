@@ -195,19 +195,30 @@ fi
 # Update web files
 cp -r "$INSTALL_DIR/ristSTB/ristgateway/web" "$INSTALL_DIR/"
 cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/stats_collector.sh" "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/stats_collector.sh"
 
-# Clean up old file-based stats collector (no longer needed - stats are in-memory)
-if systemctl is-active --quiet ristgateway-stats.service 2>/dev/null; then
-    echo "Stopping old stats collector service..."
-    systemctl stop ristgateway-stats.service
-fi
-if systemctl is-enabled --quiet ristgateway-stats.service 2>/dev/null; then
-    systemctl disable ristgateway-stats.service
-fi
-rm -f /etc/systemd/system/ristgateway-stats.service
-rm -f "$INSTALL_DIR/stats_collector.sh"
+# Migrate from /tmp to /dev/shm (shared memory)
 rm -rf /tmp/ristgateway-stats
+mkdir -p /dev/shm/ristgateway-stats
+
+# Create/update stats collector service (uses /dev/shm - RAM backed)
+cat > /etc/systemd/system/ristgateway-stats.service << 'SVCEOF'
+[Unit]
+Description=RIST Gateway Stats Collector
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ristgateway/stats_collector.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
 systemctl daemon-reload
+systemctl enable ristgateway-stats.service
 
 # NOTE: We do NOT copy gateway_config.yaml to preserve existing configuration
 echo "[OK] Configuration preserved at /etc/ristgateway/gateway_config.yaml"
@@ -219,7 +230,11 @@ echo "Starting services..."
 # Reload systemd to pick up any service file changes
 systemctl daemon-reload
 
-# Start API if it was running (stats are now collected by API's background thread)
+# Start stats collector (writes to /dev/shm - no disk I/O)
+echo "Starting stats collector..."
+systemctl start ristgateway-stats.service
+
+# Start API if it was running
 if [ "$API_WAS_RUNNING" = true ]; then
     echo "Starting Web API..."
     systemctl start ristgateway-api.service
@@ -241,7 +256,8 @@ echo ""
 echo "Summary:"
 echo "  - librist/rist22rist rebuilt"
 echo "  - Web UI updated"
-echo "  - API updated (with in-memory stats)"
+echo "  - API updated"
+echo "  - Stats use /dev/shm (RAM, no disk I/O)"
 echo "  - Configuration preserved"
 echo "  - Running gateways restarted"
 echo ""

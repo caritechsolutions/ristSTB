@@ -964,7 +964,8 @@ def _check_cgroup(gateway_id: str) -> dict:
 
 def _read_stats_file(service_name: str) -> str:
     """Read the last few lines from the stats file to get both receiver and sender stats"""
-    stats_file = f"/tmp/ristgateway-stats/{service_name}.txt"
+    # Use /dev/shm (shared memory / tmpfs) - RAM backed, no disk I/O
+    stats_file = f"/dev/shm/ristgateway-stats/{service_name}.txt"
     try:
         if os.path.exists(stats_file):
             with open(stats_file, 'r') as f:
@@ -1558,33 +1559,32 @@ def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get metrics for a gateway from in-memory stats (updated by background poller)"""
+    """Get metrics for a gateway from shared memory stats file"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail=f"Gateway '{gateway_id}' not found")
 
-    # Read from in-memory stats (populated by stats_poller_loop)
-    stats = get_gateway_stats(gateway_id)
+    service_name = f"ristgateway-{gateway_id}"
+    stats = {}
 
-    # If no stats yet, return empty structure
-    if not stats:
-        stats = get_empty_stats()
-        stats['running'] = False
-        stats['cpu_percent'] = None
-        stats['memory_mb'] = None
+    # Get cgroup status (running, CPU, memory)
+    status = _check_cgroup(gateway_id)
+    is_running = status['running']
 
-    is_running = stats.get('running', False)
-    cpu_percent = stats.get('cpu_percent')
-    memory_mb = stats.get('memory_mb')
+    # Read stats from shared memory file
+    if is_running:
+        stats_data = _read_stats_file(service_name)
+        if stats_data:
+            stats = parse_rist_json_stats(stats_data)
 
     return {
         "gateway_id": gateway_id,
         "running": is_running,
         "stats": stats,
-        "cpu_percent": cpu_percent,
-        "memory_mb": memory_mb,
+        "cpu_percent": status.get('cpu_percent'),
+        "memory_mb": status.get('memory_mb'),
         "timestamp": datetime.now().isoformat()
     }
 

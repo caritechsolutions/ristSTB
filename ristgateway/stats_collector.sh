@@ -1,9 +1,10 @@
 #!/bin/bash
 # RIST Gateway Stats Collector
-# Runs as a separate service, writes journal stats to temp files
+# Runs as a separate service, writes journal stats to shared memory
 # The API reads these files instead of calling subprocess
+# Using /dev/shm (tmpfs) - RAM backed, no disk I/O
 
-STATS_DIR="/tmp/ristgateway-stats"
+STATS_DIR="/dev/shm/ristgateway-stats"
 mkdir -p "$STATS_DIR"
 
 while true; do
