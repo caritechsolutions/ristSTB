@@ -154,6 +154,15 @@ ninja -C build install
 # Update library cache
 ldconfig
 
+# Rebuild ristpreview (preview transcoder)
+echo ""
+echo "Rebuilding ristpreview..."
+gcc -O2 -Wall -pthread \
+    "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" \
+    -o /usr/local/bin/ristpreview
+chmod +x /usr/local/bin/ristpreview
+echo "[OK] ristpreview updated"
+
 # Verify installation
 echo ""
 echo "Verifying installation..."
@@ -201,6 +210,7 @@ chmod +x "$INSTALL_DIR/stats_collector.sh"
 # Migrate from /tmp to /dev/shm (shared memory)
 rm -rf /tmp/ristgateway-stats
 mkdir -p /dev/shm/ristgateway-stats
+mkdir -p /dev/shm/ristgateway-preview
 
 # Create/update stats collector service (uses /dev/shm - RAM backed)
 cat > /etc/systemd/system/ristgateway-stats.service << 'SVCEOF'
@@ -255,6 +265,7 @@ echo "Updated from $CURRENT_COMMIT to $NEW_COMMIT"
 echo ""
 echo "Summary:"
 echo "  - librist/rist22rist rebuilt"
+echo "  - ristpreview rebuilt"
 echo "  - Web UI updated"
 echo "  - API updated"
 echo "  - Stats use /dev/shm (RAM, no disk I/O)"

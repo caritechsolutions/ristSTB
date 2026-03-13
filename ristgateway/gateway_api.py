@@ -2150,6 +2150,145 @@ def get_gateway_metrics_history(gateway_id: str):
     }
 
 # =============================================================================
+# Preview (Live Stream Player)
+# =============================================================================
+
+import socket
+
+PREVIEW_DIR = '/dev/shm/ristgateway-preview'
+
+def send_to_preview_socket(gateway_id: str, command: str) -> Optional[str]:
+    """Send command to ristpreview Unix socket, return response or None"""
+    socket_path = os.path.join(PREVIEW_DIR, gateway_id, 'keepalive.sock')
+    if not os.path.exists(socket_path):
+        return None
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(2.0)
+        sock.connect(socket_path)
+        sock.send(command.encode())
+        response = sock.recv(1024).decode().strip()
+        sock.close()
+        return response
+    except Exception:
+        return None
+
+@app.post("/api/gateways/{gateway_id}/preview/start", dependencies=[Depends(auth_required)])
+def start_preview(gateway_id: str):
+    """Start preview transcoder for gateway"""
+    config = load_config()
+    gateways = config.get('gateways', {})
+
+    if gateway_id not in gateways:
+        raise HTTPException(status_code=404, detail="Gateway not found")
+
+    gw = gateways[gateway_id]
+    outputs = gw.get('outputs', [])
+    if not outputs:
+        raise HTTPException(status_code=400, detail="Gateway has no outputs configured")
+
+    # Get first enabled output URL
+    output_url = None
+    for output in outputs:
+        if output.get('enabled', True):
+            output_url = output.get('url')
+            break
+
+    if not output_url:
+        raise HTTPException(status_code=400, detail="No enabled outputs found")
+
+    preview_dir = os.path.join(PREVIEW_DIR, gateway_id)
+    socket_path = os.path.join(preview_dir, 'keepalive.sock')
+
+    # Check if already running
+    response = send_to_preview_socket(gateway_id, "keepalive")
+    if response == "ok":
+        # Already running, just return the HLS URL
+        return {
+            "status": "running",
+            "hls_url": f"/api/gateways/{gateway_id}/preview/stream.m3u8"
+        }
+
+    # Create preview directory
+    os.makedirs(preview_dir, exist_ok=True)
+
+    # Start ristpreview process
+    try:
+        proc = subprocess.Popen(
+            [
+                '/usr/local/bin/ristpreview',
+                '--rist-url', output_url,
+                '--output', preview_dir
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ristpreview not installed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start preview: {e}")
+
+    # Wait for socket to appear (up to 5 seconds)
+    for _ in range(50):
+        if os.path.exists(socket_path):
+            # Verify it's responding
+            response = send_to_preview_socket(gateway_id, "keepalive")
+            if response == "ok":
+                break
+        time.sleep(0.1)
+    else:
+        # Timeout - check if process is still running
+        if proc.poll() is not None:
+            raise HTTPException(status_code=500, detail="Preview process exited unexpectedly")
+        raise HTTPException(status_code=500, detail="Preview process not responding")
+
+    return {
+        "status": "started",
+        "hls_url": f"/api/gateways/{gateway_id}/preview/stream.m3u8"
+    }
+
+@app.post("/api/gateways/{gateway_id}/preview/keepalive", dependencies=[Depends(auth_required)])
+def preview_keepalive(gateway_id: str):
+    """Send keepalive to preview process"""
+    response = send_to_preview_socket(gateway_id, "keepalive")
+    if response is None:
+        raise HTTPException(status_code=404, detail="Preview not running")
+    if response != "ok":
+        raise HTTPException(status_code=500, detail=f"Unexpected response: {response}")
+    return {"status": "ok"}
+
+@app.get("/api/gateways/{gateway_id}/preview/info", dependencies=[Depends(auth_required)])
+def preview_info(gateway_id: str):
+    """Get stream info from preview process"""
+    response = send_to_preview_socket(gateway_id, "info")
+    if response is None:
+        raise HTTPException(status_code=404, detail="Preview not running")
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid response from preview")
+
+@app.get("/api/gateways/{gateway_id}/preview/{filename:path}", dependencies=[Depends(auth_required)])
+def serve_preview_file(gateway_id: str, filename: str):
+    """Serve HLS files from preview"""
+    # Validate filename to prevent path traversal
+    if '..' in filename or filename.startswith('/'):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    preview_dir = os.path.join(PREVIEW_DIR, gateway_id)
+    file_path = os.path.join(preview_dir, filename)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if filename.endswith('.m3u8'):
+        return FileResponse(file_path, media_type='application/vnd.apple.mpegurl')
+    elif filename.endswith('.ts'):
+        return FileResponse(file_path, media_type='video/mp2t')
+    else:
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+# =============================================================================
 # Static Files (Web UI)
 # =============================================================================
 

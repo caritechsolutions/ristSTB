@@ -80,7 +80,8 @@ case $OS in
             pkg-config \
             python3 \
             python3-pip \
-            python3-venv
+            python3-venv \
+            ffmpeg
         ;;
     centos|rhel|rocky|almalinux)
         dnf install -y epel-release || yum install -y epel-release
@@ -95,7 +96,8 @@ case $OS in
             libmicrohttpd-devel \
             pkgconfig \
             python3 \
-            python3-pip
+            python3-pip \
+            ffmpeg
         ;;
     fedora)
         dnf install -y \
@@ -109,7 +111,8 @@ case $OS in
             libmicrohttpd-devel \
             pkgconfig \
             python3 \
-            python3-pip
+            python3-pip \
+            ffmpeg
         ;;
     *)
         echo "Unsupported OS: $OS"
@@ -165,6 +168,15 @@ ninja -C build install
 
 # Update library cache
 ldconfig
+
+# Build ristpreview (preview transcoder)
+echo ""
+echo "Building ristpreview..."
+gcc -O2 -Wall -pthread \
+    "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" \
+    -o /usr/local/bin/ristpreview
+chmod +x /usr/local/bin/ristpreview
+echo "ristpreview installed to /usr/local/bin/ristpreview"
 
 # Verify installation
 echo ""
@@ -225,8 +237,9 @@ cp "$INSTALL_DIR/ristSTB/ristgateway/stats_collector.sh" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/stats_collector.sh"
 cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_config.yaml" /etc/ristgateway/ 2>/dev/null || true
 
-# Create shared memory directory for stats (RAM-backed, no disk I/O)
+# Create shared memory directories (RAM-backed, no disk I/O)
 mkdir -p /dev/shm/ristgateway-stats
+mkdir -p /dev/shm/ristgateway-preview
 
 # Create systemd service for stats collector
 cat > /etc/systemd/system/ristgateway-stats.service << 'EOF'
@@ -283,6 +296,7 @@ echo "  - rist22rist  (RIST gateway with multi-peer, NPD, SSRC passthrough)"
 echo "  - rist2rist   (original simple RIST relay)"
 echo "  - ristsender  (RIST sender)"
 echo "  - ristreceiver (RIST receiver)"
+echo "  - ristpreview (preview transcoder for web player)"
 echo "  - Web API     (http://localhost)"
 echo ""
 echo "Web Interface:"

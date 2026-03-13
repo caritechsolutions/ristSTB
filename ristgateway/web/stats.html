@@ -6,6 +6,7 @@
     <title>Gateway Stats - RIST Gateway</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -765,13 +766,14 @@
             </div>
             <div class="modal-body">
                 <div class="player-container" id="player-container">
-                    <div class="player-placeholder">
+                    <video id="preview-video" style="display:none; width:100%; height:100%; background:#000;"></video>
+                    <div class="player-placeholder" id="player-placeholder" onclick="startPreview()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <rect x="2" y="4" width="20" height="16" rx="2"/>
                             <polygon points="10 8 16 12 10 16"/>
                         </svg>
-                        <div>Click to start preview</div>
-                        <div style="font-size: 13px; margin-top: 4px;">Requires ffmpeg transcoding service</div>
+                        <div id="player-status">Click to start preview</div>
+                        <div style="font-size: 11px; margin-top: 4px; color: var(--text-secondary);">Low-bitrate transcode for monitoring</div>
                     </div>
                 </div>
                 <div class="video-stats">
@@ -1105,12 +1107,163 @@
             outputBwChart.update('none');
         }
 
+        let hlsPlayer = null;
+        let previewKeepaliveInterval = null;
+        let previewInfoInterval = null;
+        let previewActive = false;
+
         function openPreview() {
             document.getElementById('preview-modal').classList.add('active');
         }
 
         function closePreview() {
             document.getElementById('preview-modal').classList.remove('active');
+            stopPreview();
+        }
+
+        function stopPreview() {
+            previewActive = false;
+            if (previewKeepaliveInterval) {
+                clearInterval(previewKeepaliveInterval);
+                previewKeepaliveInterval = null;
+            }
+            if (previewInfoInterval) {
+                clearInterval(previewInfoInterval);
+                previewInfoInterval = null;
+            }
+            if (hlsPlayer) {
+                hlsPlayer.destroy();
+                hlsPlayer = null;
+            }
+            const video = document.getElementById('preview-video');
+            video.style.display = 'none';
+            video.src = '';
+            document.getElementById('player-placeholder').style.display = 'flex';
+            document.getElementById('player-status').textContent = 'Click to start preview';
+            // Reset stream info
+            document.getElementById('vid-resolution').textContent = '-';
+            document.getElementById('vid-codec').textContent = '-';
+            document.getElementById('vid-fps').textContent = '-';
+            document.getElementById('vid-bitrate').textContent = '-';
+        }
+
+        async function startPreview() {
+            if (previewActive) return;
+
+            const placeholder = document.getElementById('player-placeholder');
+            const statusEl = document.getElementById('player-status');
+            statusEl.textContent = 'Starting preview...';
+
+            try {
+                // Start the preview transcoder
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/preview/start`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    statusEl.textContent = 'Error: ' + (data.detail || 'Failed to start');
+                    return;
+                }
+
+                const result = await response.json();
+                previewActive = true;
+                statusEl.textContent = 'Loading stream...';
+
+                // Wait a moment for ffmpeg to generate segments
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Start HLS playback
+                const video = document.getElementById('preview-video');
+                const hlsUrl = `${API_BASE}/gateways/${gatewayId}/preview/stream.m3u8`;
+
+                if (Hls.isSupported()) {
+                    hlsPlayer = new Hls({
+                        enableWorker: true,
+                        lowLatencyMode: true,
+                        backBufferLength: 30
+                    });
+                    hlsPlayer.loadSource(hlsUrl);
+                    hlsPlayer.attachMedia(video);
+                    hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                        placeholder.style.display = 'none';
+                        video.style.display = 'block';
+                        video.play().catch(() => {});
+                    });
+                    hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            console.error('HLS fatal error:', data);
+                            statusEl.textContent = 'Stream error - retrying...';
+                            setTimeout(() => {
+                                if (previewActive && hlsPlayer) {
+                                    hlsPlayer.loadSource(hlsUrl);
+                                }
+                            }, 2000);
+                        }
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Safari native HLS
+                    video.src = hlsUrl;
+                    video.addEventListener('loadedmetadata', () => {
+                        placeholder.style.display = 'none';
+                        video.style.display = 'block';
+                        video.play().catch(() => {});
+                    });
+                } else {
+                    statusEl.textContent = 'HLS not supported in this browser';
+                    previewActive = false;
+                    return;
+                }
+
+                // Start keepalive every 10 seconds
+                previewKeepaliveInterval = setInterval(sendKeepalive, 10000);
+
+                // Fetch stream info periodically
+                fetchStreamInfo();
+                previewInfoInterval = setInterval(fetchStreamInfo, 5000);
+
+            } catch (error) {
+                console.error('Preview error:', error);
+                statusEl.textContent = 'Error: ' + error.message;
+                previewActive = false;
+            }
+        }
+
+        async function sendKeepalive() {
+            if (!previewActive) return;
+            try {
+                await fetch(`${API_BASE}/gateways/${gatewayId}/preview/keepalive`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Keepalive failed:', error);
+            }
+        }
+
+        async function fetchStreamInfo() {
+            if (!previewActive) return;
+            try {
+                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/preview/info`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const info = await response.json();
+                    if (info.ready) {
+                        document.getElementById('vid-resolution').textContent =
+                            info.video.width && info.video.height ? `${info.video.width}x${info.video.height}` : '-';
+                        document.getElementById('vid-codec').textContent =
+                            info.video.codec ? `${info.video.codec.toUpperCase()} / ${(info.audio.codec || 'aac').toUpperCase()}` : '-';
+                        document.getElementById('vid-fps').textContent =
+                            info.video.fps ? `${info.video.fps.toFixed(2)} fps` : '-';
+                        document.getElementById('vid-bitrate').textContent =
+                            info.bitrate ? `${(info.bitrate / 1000000).toFixed(2)} Mbps` : '-';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch stream info:', error);
+            }
         }
 
         async function startGateway() {
@@ -1167,6 +1320,9 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') closePreview();
         });
+
+        // Stop preview when leaving page
+        window.addEventListener('beforeunload', stopPreview);
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
