@@ -263,202 +263,168 @@
             border-color: var(--accent-blue);
         }
 
-        /* Gateway Grid */
-        .gateway-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 1.5rem;
-        }
-
-        /* Gateway Card */
-        .gateway-card {
-            background: var(--bg-card);
-            border-radius: var(--card-radius);
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-            transition: all var(--transition-speed);
-        }
-
-        .gateway-card:hover {
-            border-color: var(--accent-blue);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-        }
-
-        .gateway-header {
-            padding: 1.25rem;
+        /* Channel List */
+        .channel-list {
             display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            border-bottom: 1px solid var(--border-color);
+            flex-direction: column;
+            gap: 2px;
         }
 
-        .gateway-info {
+        /* Group Header */
+        .group-header {
             display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .group-header:first-child { margin-top: 0; }
+
+        .group-header:hover { background: var(--bg-hover); }
+
+        .group-arrow {
+            color: var(--text-secondary);
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .group-header.collapsed .group-arrow { transform: rotate(-90deg); }
+
+        .group-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .group-count {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .group-channels { display: flex; flex-direction: column; gap: 2px; }
+        .group-header.collapsed + .group-channels { display: none; }
+
+        /* Channel Row */
+        .channel-row {
+            display: flex;
+            align-items: center;
             gap: 12px;
-            align-items: flex-start;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            transition: background var(--transition-speed);
+            cursor: pointer;
         }
 
-        .gateway-checkbox {
-            margin-top: 4px;
-        }
+        .channel-row:hover { background: var(--bg-hover); }
 
-        .gateway-checkbox input {
-            width: 18px;
-            height: 18px;
+        .channel-checkbox input {
+            width: 16px;
+            height: 16px;
             cursor: pointer;
             accent-color: var(--accent-blue);
         }
 
-        .gateway-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 4px;
+        .quality-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
         }
 
-        .gateway-id {
+        .quality-dot.excellent { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+        .quality-dot.good { background: #84cc16; box-shadow: 0 0 6px #84cc16; }
+        .quality-dot.warning { background: var(--accent-orange); box-shadow: 0 0 6px var(--accent-orange); }
+        .quality-dot.critical { background: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
+        .quality-dot.stopped { background: var(--text-secondary); }
+
+        .channel-name {
+            font-weight: 500;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        .channel-id {
             color: var(--text-secondary);
-            font-size: 12px;
+            font-size: 11px;
             font-family: monospace;
+            min-width: 100px;
         }
 
-        .status-badge {
+        .channel-quality {
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 50px;
+        }
+
+        .channel-io {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            flex: 1;
+        }
+
+        .channel-io span { white-space: nowrap; }
+
+        .channel-status {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
             font-weight: 500;
+            min-width: 70px;
+            justify-content: center;
         }
 
-        .status-badge.running {
+        .channel-status.running {
             background: rgba(34, 197, 94, 0.15);
             color: var(--accent-green);
         }
 
-        .status-badge.stopped {
+        .channel-status.stopped {
             background: rgba(239, 68, 68, 0.15);
             color: var(--accent-red);
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
-        }
-
-        .status-badge.running .status-dot {
-            animation: pulse 2s infinite;
-            box-shadow: 0 0 8px currentColor;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        /* Peer Lists */
-        .gateway-body {
-            padding: 1.25rem;
-        }
-
-        .peer-section {
-            margin-bottom: 1rem;
-        }
-
-        .peer-section:last-child {
-            margin-bottom: 0;
-        }
-
-        .peer-label {
+        .channel-actions {
             display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-secondary);
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .peer-label .icon {
-            font-size: 14px;
-        }
-
-        .peer-list {
-            display: flex;
-            flex-direction: column;
             gap: 6px;
         }
 
-        .peer-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .channel-actions .btn {
+            padding: 6px 12px;
+            font-size: 11px;
+        }
+
+        .channel-actions .btn-icon {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+        }
+
+        /* Group Filter */
+        .group-select {
             padding: 8px 12px;
-            background: var(--bg-secondary);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
             border-radius: 8px;
+            color: var(--text-primary);
             font-size: 13px;
-            font-family: monospace;
+            cursor: pointer;
+            min-width: 150px;
         }
 
-        .peer-status {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--accent-green);
-        }
-
-        .peer-status.disabled {
-            background: var(--text-secondary);
-        }
-
-        .peer-name {
-            color: var(--text-secondary);
-            font-family: 'Inter', sans-serif;
-            margin-left: auto;
-            font-size: 11px;
-        }
-
-        /* Settings Pills */
-        .settings-pills {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .pill {
-            padding: 4px 10px;
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        .pill.active {
-            background: rgba(59, 130, 246, 0.2);
-            color: var(--accent-blue);
-        }
-
-        /* Gateway Actions */
-        .gateway-actions {
-            display: flex;
-            gap: 8px;
-            padding: 1rem 1.25rem;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border-color);
-        }
-
-        .gateway-actions .btn {
-            flex: 1;
-            justify-content: center;
-            padding: 10px;
+        .group-select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
         }
 
         /* Bulk Actions Bar */
@@ -640,24 +606,28 @@
                 <div class="stat-value red" id="stat-stopped">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Total Peers</div>
-                <div class="stat-value" id="stat-peers">0</div>
+                <div class="stat-label">Issues</div>
+                <div class="stat-value red" id="stat-issues">0</div>
             </div>
         </div>
 
         <div class="toolbar">
             <div class="search-box">
-                <input type="text" id="search-input" placeholder="Search gateways..." oninput="handleSearch()">
+                <input type="text" id="search-input" placeholder="Search channels..." oninput="handleSearch()">
             </div>
+            <select class="group-select" id="group-filter" onchange="handleGroupFilter()">
+                <option value="">All Groups</option>
+            </select>
             <div class="filter-buttons">
                 <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
                 <button class="filter-btn" data-filter="running" onclick="setFilter('running')">Running</button>
                 <button class="filter-btn" data-filter="stopped" onclick="setFilter('stopped')">Stopped</button>
+                <button class="filter-btn" data-filter="issues" onclick="setFilter('issues')">Issues</button>
             </div>
         </div>
 
-        <div class="gateway-grid" id="gateway-grid">
-            <!-- Gateway cards will be inserted here -->
+        <div class="channel-list" id="channel-list">
+            <!-- Channel rows will be inserted here -->
         </div>
 
         <div class="empty-state" id="empty-state" style="display: none;">
@@ -699,12 +669,15 @@
     <script>
         const API_BASE = window.location.origin + '/api';
         let gateways = {};
+        let gatewayStats = {};
         let currentFilter = 'all';
+        let currentGroup = '';
         let searchQuery = '';
         let selectedGateways = new Set();
         let searchDebounceTimer = null;
         let pollInterval = null;
         let deleteGatewayId = null;
+        let collapsedGroups = new Set();
 
         // Check authentication
         async function checkAuth() {
@@ -757,15 +730,15 @@
             }
         }
 
-        // Render gateways
+        // Render channels
         function renderGateways() {
-            const grid = document.getElementById('gateway-grid');
+            const list = document.getElementById('channel-list');
             const emptyState = document.getElementById('empty-state');
 
             const filtered = getFilteredGateways();
 
             if (Object.keys(gateways).length === 0) {
-                grid.innerHTML = '';
+                list.innerHTML = '';
                 emptyState.style.display = 'block';
                 return;
             }
@@ -773,101 +746,95 @@
             emptyState.style.display = 'none';
 
             if (filtered.length === 0) {
-                grid.innerHTML = `
-                    <div class="empty-state" style="grid-column: 1/-1;">
-                        <p>No gateways match your search</p>
-                    </div>
-                `;
+                list.innerHTML = '<div class="empty-state"><p>No channels match your filter</p></div>';
                 return;
             }
 
-            grid.innerHTML = filtered.map(([id, gw]) => renderGatewayCard(id, gw)).join('');
+            // Group channels
+            const groups = {};
+            filtered.forEach(([id, gw]) => {
+                const group = gw.group || 'Ungrouped';
+                if (!groups[group]) groups[group] = [];
+                groups[group].push([id, gw]);
+            });
+
+            // Sort groups, Ungrouped last
+            const sortedGroups = Object.keys(groups).sort((a, b) => {
+                if (a === 'Ungrouped') return 1;
+                if (b === 'Ungrouped') return -1;
+                return a.localeCompare(b);
+            });
+
+            let html = '';
+            sortedGroups.forEach(groupName => {
+                const channels = groups[groupName];
+                const isCollapsed = collapsedGroups.has(groupName);
+                html += `
+                    <div class="group-header ${isCollapsed ? 'collapsed' : ''}" onclick="toggleGroup('${escapeHtml(groupName)}')">
+                        <span class="group-arrow">&#9660;</span>
+                        <span class="group-name">${escapeHtml(groupName)}</span>
+                        <span class="group-count">(${channels.length})</span>
+                    </div>
+                    <div class="group-channels">
+                        ${channels.map(([id, gw]) => renderChannelRow(id, gw)).join('')}
+                    </div>
+                `;
+            });
+
+            list.innerHTML = html;
+            updateGroupFilter();
         }
 
-        // Render single gateway card
-        function renderGatewayCard(id, gw) {
-            const isRunning = gw.running;
-            const statusClass = isRunning ? 'running' : 'stopped';
-            const statusText = isRunning ? 'Running' : 'Stopped';
+        // Get quality info for channel
+        function getQualityInfo(id, gw) {
+            if (!gw.running) return { class: 'stopped', text: '-', value: -1 };
+            const stats = gatewayStats[id];
+            if (!stats || stats.quality === undefined) return { class: 'excellent', text: '?', value: 100 };
+            const q = stats.quality;
+            if (q >= 98) return { class: 'excellent', text: q + '%', value: q };
+            if (q >= 90) return { class: 'good', text: q + '%', value: q };
+            if (q >= 70) return { class: 'warning', text: q + '%', value: q };
+            return { class: 'critical', text: q + '%', value: q };
+        }
 
+        // Render single channel row
+        function renderChannelRow(id, gw) {
+            const isRunning = gw.running;
+            const quality = getQualityInfo(id, gw);
             const inputs = gw.inputs || [];
             const outputs = gw.outputs || [];
-            const settings = gw.settings || {};
-
-            const inputsHtml = inputs.map(p => `
-                <div class="peer-item">
-                    <span class="peer-status ${p.enabled ? '' : 'disabled'}"></span>
-                    ${escapeHtml(p.url)}
-                    ${p.name ? `<span class="peer-name">${escapeHtml(p.name)}</span>` : ''}
-                </div>
-            `).join('');
-
-            const outputsHtml = outputs.map(p => `
-                <div class="peer-item">
-                    <span class="peer-status ${p.enabled ? '' : 'disabled'}"></span>
-                    ${escapeHtml(p.url)}
-                    ${p.name ? `<span class="peer-name">${escapeHtml(p.name)}</span>` : ''}
-                </div>
-            `).join('');
 
             return `
-                <div class="gateway-card" data-id="${id}">
-                    <div class="gateway-header">
-                        <div class="gateway-info">
-                            <div class="gateway-checkbox">
-                                <input type="checkbox"
-                                    ${selectedGateways.has(id) ? 'checked' : ''}
-                                    onchange="toggleSelection('${id}')">
-                            </div>
-                            <div>
-                                <div class="gateway-title">${escapeHtml(gw.name || id)}</div>
-                                <div class="gateway-id">${id}</div>
-                            </div>
-                        </div>
-                        <div class="status-badge ${statusClass}">
-                            <span class="status-dot"></span>
-                            ${statusText}
-                        </div>
+                <div class="channel-row" data-id="${id}">
+                    <div class="channel-checkbox" onclick="event.stopPropagation()">
+                        <input type="checkbox"
+                            ${selectedGateways.has(id) ? 'checked' : ''}
+                            onchange="toggleSelection('${id}')">
                     </div>
-                    <div class="gateway-body">
-                        <div class="peer-section">
-                            <div class="peer-label">
-                                <span class="icon">&#8595;</span>
-                                Inputs (${inputs.length})
-                            </div>
-                            <div class="peer-list">
-                                ${inputsHtml || '<div class="peer-item" style="color: var(--text-secondary);">No inputs configured</div>'}
-                            </div>
-                        </div>
-                        <div class="peer-section">
-                            <div class="peer-label">
-                                <span class="icon">&#8593;</span>
-                                Outputs (${outputs.length})
-                            </div>
-                            <div class="peer-list">
-                                ${outputsHtml || '<div class="peer-item" style="color: var(--text-secondary);">No outputs configured</div>'}
-                            </div>
-                        </div>
-                        <div class="settings-pills">
-                            <span class="pill ${settings.npd ? 'active' : ''}">NPD ${settings.npd ? 'ON' : 'OFF'}</span>
-                            <span class="pill ${settings.ssrc_passthrough ? 'active' : ''}">SSRC Pass ${settings.ssrc_passthrough ? 'ON' : 'OFF'}</span>
-                            <span class="pill">Profile ${settings.profile || 1}</span>
-                            <span class="pill">Buffer ${settings.buffer || 1000}ms</span>
-                        </div>
+                    <div class="quality-dot ${quality.class}" title="Quality: ${quality.text}"></div>
+                    <div class="channel-name">${escapeHtml(gw.name || id)}</div>
+                    <div class="channel-id">${id}</div>
+                    <div class="channel-quality" style="color: var(--accent-${quality.class === 'excellent' ? 'green' : quality.class === 'good' ? 'green' : quality.class === 'warning' ? 'orange' : quality.class === 'critical' ? 'red' : 'text-secondary'})">${quality.text}</div>
+                    <div class="channel-io">
+                        <span>&#8595; ${inputs.length} in</span>
+                        <span>&#8593; ${outputs.length} out</span>
                     </div>
-                    <div class="gateway-actions">
+                    <div class="channel-status ${isRunning ? 'running' : 'stopped'}">
+                        ${isRunning ? 'Running' : 'Stopped'}
+                    </div>
+                    <div class="channel-actions" onclick="event.stopPropagation()">
                         ${isRunning
                             ? `<button class="btn btn-danger" onclick="stopGateway('${id}')">Stop</button>`
                             : `<button class="btn btn-success" onclick="startGateway('${id}')">Start</button>`
                         }
                         <button class="btn btn-secondary" onclick="window.location.href='/edit/${id}'">Edit</button>
                         <button class="btn btn-secondary btn-icon" onclick="window.location.href='/stats/${id}'" title="Stats">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 20V10M12 20V4M6 20v-6"/>
                             </svg>
                         </button>
                         <button class="btn btn-secondary btn-icon" onclick="showDeleteModal('${id}', '${escapeHtml(gw.name || id)}')" title="Delete">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                             </svg>
                         </button>
@@ -876,22 +843,63 @@
             `;
         }
 
+        // Toggle group collapse
+        function toggleGroup(groupName) {
+            if (collapsedGroups.has(groupName)) {
+                collapsedGroups.delete(groupName);
+            } else {
+                collapsedGroups.add(groupName);
+            }
+            renderGateways();
+        }
+
+        // Update group filter dropdown
+        function updateGroupFilter() {
+            const select = document.getElementById('group-filter');
+            const groups = new Set();
+            Object.values(gateways).forEach(gw => {
+                groups.add(gw.group || 'Ungrouped');
+            });
+            const sortedGroups = Array.from(groups).sort((a, b) => {
+                if (a === 'Ungrouped') return 1;
+                if (b === 'Ungrouped') return -1;
+                return a.localeCompare(b);
+            });
+            select.innerHTML = '<option value="">All Groups</option>' +
+                sortedGroups.map(g => `<option value="${escapeHtml(g)}" ${currentGroup === g ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('');
+        }
+
+        // Handle group filter change
+        function handleGroupFilter() {
+            currentGroup = document.getElementById('group-filter').value;
+            renderGateways();
+        }
+
         // Filter gateways
         function getFilteredGateways() {
             return Object.entries(gateways).filter(([id, gw]) => {
+                // Group filter
+                if (currentGroup && (gw.group || 'Ungrouped') !== currentGroup) return false;
+
                 // Status filter
                 if (currentFilter === 'running' && !gw.running) return false;
                 if (currentFilter === 'stopped' && gw.running) return false;
+                if (currentFilter === 'issues') {
+                    if (!gw.running) return false;
+                    const stats = gatewayStats[id];
+                    if (!stats || stats.quality === undefined || stats.quality >= 90) return false;
+                }
 
                 // Search filter
                 if (searchQuery) {
                     const query = searchQuery.toLowerCase();
                     const name = (gw.name || '').toLowerCase();
                     const idLower = id.toLowerCase();
+                    const group = (gw.group || '').toLowerCase();
                     const inputs = (gw.inputs || []).map(p => p.url + ' ' + (p.name || '')).join(' ').toLowerCase();
                     const outputs = (gw.outputs || []).map(p => p.url + ' ' + (p.name || '')).join(' ').toLowerCase();
 
-                    if (!name.includes(query) && !idLower.includes(query) &&
+                    if (!name.includes(query) && !idLower.includes(query) && !group.includes(query) &&
                         !inputs.includes(query) && !outputs.includes(query)) {
                         return false;
                     }
@@ -903,15 +911,19 @@
 
         // Update stats
         function updateStats() {
-            const all = Object.values(gateways);
-            const running = all.filter(g => g.running).length;
+            const all = Object.entries(gateways);
+            const running = all.filter(([id, g]) => g.running).length;
             const stopped = all.length - running;
-            const peers = all.reduce((sum, g) => sum + (g.inputs?.length || 0) + (g.outputs?.length || 0), 0);
+            const issues = all.filter(([id, g]) => {
+                if (!g.running) return false;
+                const stats = gatewayStats[id];
+                return stats && stats.quality !== undefined && stats.quality < 90;
+            }).length;
 
             document.getElementById('stat-total').textContent = all.length;
             document.getElementById('stat-running').textContent = running;
             document.getElementById('stat-stopped').textContent = stopped;
-            document.getElementById('stat-peers').textContent = peers;
+            document.getElementById('stat-issues').textContent = issues;
         }
 
         // Search handler with debounce
@@ -1057,10 +1069,44 @@
             loadGateways();
         }
 
+        // Load stats for all running gateways
+        async function loadAllStats() {
+            const runningIds = Object.entries(gateways)
+                .filter(([id, gw]) => gw.running)
+                .map(([id]) => id);
+
+            if (runningIds.length === 0) return;
+
+            // Fetch stats in parallel (batch of 10 to avoid overwhelming)
+            const batchSize = 10;
+            for (let i = 0; i < runningIds.length; i += batchSize) {
+                const batch = runningIds.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (id) => {
+                    try {
+                        const response = await fetch(`${API_BASE}/gateways/${id}/stats`, {
+                            credentials: 'include'
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            gatewayStats[id] = data.stats || {};
+                        }
+                    } catch (e) {
+                        // Ignore individual failures
+                    }
+                }));
+            }
+            renderGateways();
+            updateStats();
+        }
+
         // Polling
         function startPolling(interval = 5000) {
             stopPolling();
-            pollInterval = setInterval(loadGateways, interval);
+            // Load gateways every 5s, stats every 3s
+            pollInterval = setInterval(async () => {
+                await loadGateways();
+                await loadAllStats();
+            }, interval);
         }
 
         function stopPolling() {
@@ -1081,6 +1127,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             await loadGateways();
+            await loadAllStats();
             startPolling();
         });
 
