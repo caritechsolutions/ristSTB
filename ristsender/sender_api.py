@@ -146,7 +146,7 @@ def get_channel_status(channel_id: str) -> str:
 def generate_service_file(channel_id: str, channel: dict):
     """Generate systemd service file for a ristsender channel"""
 
-    # Build output URLs with settings
+    # Build output URLs with settings (comma-separated in single -o argument)
     output_urls = []
     for output in channel.get('outputs', []):
         if output.get('enabled', True):
@@ -155,7 +155,7 @@ def generate_service_file(channel_id: str, channel: dict):
             if channel['settings'].get('virt_dst_port'):
                 sep = '&' if '?' in url else '?'
                 url = f"{url}{sep}virt-dst-port={channel['settings']['virt_dst_port']}"
-            output_urls.append(f"-o '{url}'")
+            output_urls.append(url)
 
     if not output_urls:
         logger.warning(f"No enabled outputs for channel {channel_id}")
@@ -166,14 +166,13 @@ def generate_service_file(channel_id: str, channel: dict):
         '/usr/local/bin/ristsender',
         f"-p {channel['settings'].get('profile', 1)}",
         f"-i '{channel['input']}'",
-    ]
-    cmd_parts.extend(output_urls)
-    cmd_parts.extend([
+        '-n',  # Null packets
+        f"-o '{','.join(output_urls)}'",  # Comma-separated outputs in single -o
         '-v 6',
         '-M',  # Metrics HTTP
         f"--metrics-port={channel['metrics_port']}",
         '-S 1000',  # Stats interval
-    ])
+    ]
 
     # Buffer
     if channel['settings'].get('buffer'):
