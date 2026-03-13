@@ -910,7 +910,6 @@
                     <span><strong>Resolution:</strong> <span id="info-resolution">-</span></span>
                     <span><strong>FPS:</strong> <span id="info-fps">-</span></span>
                     <span><strong>Audio:</strong> <span id="info-audio">-</span></span>
-                    <span><strong>Bitrate:</strong> <span id="info-bitrate">-</span></span>
                 </div>
                 <div class="preview-error" id="preview-error" style="display: none;"></div>
             </div>
@@ -1424,9 +1423,14 @@
 
                 previewHls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        document.getElementById('preview-loading').style.display = 'none';
-                        document.getElementById('preview-error').style.display = 'block';
-                        document.getElementById('preview-error').textContent = 'Stream error: ' + data.type;
+                        console.error('HLS fatal error:', data);
+                        document.getElementById('preview-status').textContent = 'Stream error - retrying...';
+                        document.getElementById('preview-loading').style.display = 'block';
+                        setTimeout(() => {
+                            if (previewGatewayId && previewHls) {
+                                previewHls.loadSource(hlsUrl);
+                            }
+                        }, 2000);
                     }
                 });
 
@@ -1463,8 +1467,6 @@
                             info.video.fps ? info.video.fps.toFixed(2) : '-';
                         document.getElementById('info-audio').textContent =
                             info.audio.codec ? `${info.audio.codec} ${info.audio.channels}ch` : '-';
-                        document.getElementById('info-bitrate').textContent =
-                            info.bitrate ? (info.bitrate / 1000000).toFixed(1) + ' Mbps' : '-';
                     }
                 }
             } catch (error) {
