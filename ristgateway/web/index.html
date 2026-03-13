@@ -947,10 +947,28 @@
         }
 
         // Get quality info for channel
+        // LED: green = all peers alive, yellow = some dead, red = all dead
         function getQualityInfo(id, gw) {
             if (!gw.running) return { class: 'stopped', text: '-', value: -1 };
             const stats = gatewayStats[id];
             if (!stats || stats.quality === undefined) return { class: 'excellent', text: '?', value: 100 };
+
+            // Check peer status for LED color
+            const deadPeers = stats.dead_peers || 0;
+            const alivePeers = stats.alive_peers || 0;
+            const totalPeers = deadPeers + alivePeers;
+
+            // All peers dead = red/critical with 0%
+            if (totalPeers > 0 && alivePeers === 0) {
+                return { class: 'critical', text: '0%', value: 0 };
+            }
+            // Some peers dead = yellow/warning
+            if (deadPeers > 0 && alivePeers > 0) {
+                const q = stats.quality;
+                return { class: 'warning', text: q + '%', value: q };
+            }
+
+            // All peers alive - use quality-based coloring
             const q = stats.quality;
             if (q >= 98) return { class: 'excellent', text: q + '%', value: q };
             if (q >= 90) return { class: 'good', text: q + '%', value: q };

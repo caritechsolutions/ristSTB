@@ -929,12 +929,30 @@
         function updateStatsDisplay(data) {
             const stats = data.stats || {};
 
-            // Quality ring
-            const quality = stats.quality || 0;
+            // Quality ring - consider peer status
+            const deadPeers = stats.dead_peers || 0;
+            const alivePeers = stats.alive_peers || 0;
+            const totalPeers = deadPeers + alivePeers;
+            let quality = stats.quality || 0;
+            let qualityColor;
+
+            // All peers dead = red with 0%
+            if (totalPeers > 0 && alivePeers === 0) {
+                quality = 0;
+                qualityColor = 'var(--accent-red)';
+            }
+            // Some peers dead = yellow/orange
+            else if (deadPeers > 0 && alivePeers > 0) {
+                qualityColor = 'var(--accent-orange)';
+            }
+            // Normal quality-based coloring
+            else {
+                qualityColor = quality >= 95 ? 'var(--accent-green)' :
+                               quality >= 80 ? 'var(--accent-yellow)' :
+                               quality >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+            }
+
             const qualityRing = document.getElementById('quality-ring');
-            const qualityColor = quality >= 95 ? 'var(--accent-green)' :
-                                 quality >= 80 ? 'var(--accent-yellow)' :
-                                 quality >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
             qualityRing.style.setProperty('--quality', quality);
             qualityRing.style.setProperty('--quality-color', qualityColor);
             document.getElementById('quality-value').textContent = quality.toFixed(0) + '%';

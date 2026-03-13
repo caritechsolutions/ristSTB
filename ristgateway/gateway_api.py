@@ -307,6 +307,20 @@ def parse_rist_json_stats(text: str) -> Dict:
                         metrics['peers'] = len(peers)
 
                         if peers:
+                            # Count dead/alive peers
+                            dead_count = sum(1 for p in peers if p.get('dead', 0) == 1)
+                            alive_count = len(peers) - dead_count
+                            metrics['dead_peers'] = dead_count
+                            metrics['alive_peers'] = alive_count
+
+                            # If all peers are dead, quality and bandwidth should be 0
+                            if alive_count == 0:
+                                metrics['quality'] = 0
+                                metrics['bandwidth'] = 0
+                            # If no packets received, quality is 0
+                            elif stats.get('received', 0) == 0:
+                                metrics['quality'] = 0
+
                             total_rtt = sum(p.get('stats', {}).get('rtt', 0) for p in peers)
                             total_avg_rtt = sum(p.get('stats', {}).get('avg_rtt', 0) for p in peers)
                             metrics['rtt'] = total_rtt / len(peers)
@@ -653,6 +667,20 @@ def parse_metrics_json(data: dict) -> Dict:
                 metrics['peers'] = len(peers)
 
                 if peers:
+                    # Count dead/alive peers
+                    dead_count = sum(1 for p in peers if p.get('dead', 0) == 1)
+                    alive_count = len(peers) - dead_count
+                    metrics['dead_peers'] = dead_count
+                    metrics['alive_peers'] = alive_count
+
+                    # If all peers are dead, quality and bandwidth should be 0
+                    if alive_count == 0:
+                        metrics['quality'] = 0
+                        metrics['bandwidth'] = 0
+                    # If no packets received, quality is 0
+                    elif stats.get('received', 0) == 0:
+                        metrics['quality'] = 0
+
                     total_rtt = sum(p.get('stats', {}).get('rtt', 0) for p in peers)
                     metrics['rtt'] = total_rtt / len(peers)
                     metrics['peer_details'] = [
@@ -723,6 +751,8 @@ def get_empty_stats() -> Dict:
     return {
         'quality': 0,
         'peers': 0,
+        'dead_peers': 0,
+        'alive_peers': 0,
         'bandwidth': 0,
         'retry_bandwidth': 0,
         'rtt': 0,
