@@ -95,13 +95,15 @@ def init_gateway_stats(gateway_id: str):
             gateway_stats_history[gateway_id] = deque(maxlen=STATS_HISTORY_SIZE)
 
 def parse_rist_json_stats(text: str) -> Dict:
-    """Parse JSON stats from rist22rist output"""
+    """Parse JSON stats from rist22rist output - captures all available metrics"""
     metrics = {
+        'flow_id': None,
         'quality': 0,
         'peers': 0,
         'bandwidth': 0,
         'retry_bandwidth': 0,
         'rtt': 0,
+        'avg_rtt': 0,
         'packets': {
             'sent': 0,
             'received': 0,
@@ -109,25 +111,36 @@ def parse_rist_json_stats(text: str) -> Dict:
             'reordered': 0,
             'recovered': 0,
             'recovered_one_retry': 0,
-            'lost': 0
+            'recovered_two_retry': 0,
+            'recovered_three_retry': 0,
+            'recovered_more_retry': 0,
+            'lost': 0,
+            'dropped_late': 0,
+            'dropped_full': 0,
+            'duplicates': 0,
+            'retries': 0
         },
         'timing': {
             'min_iat': 0,
             'cur_iat': 0,
-            'max_iat': 0
+            'max_iat': 0,
+            'avg_buffer_time': 0
+        },
+        'missing_queue': {
+            'current': 0,
+            'max': 0
         },
         'peer_details': [],
-        'sender': {},  # Keep for backwards compat - will be first/aggregate sender
-        'senders': [],  # All connected output peers
+        'sender': {},  # Keep for backwards compat
+        'senders': [],  # All connected output peers (deduped by id)
+        'incoming_queue': {},  # Sender's incoming queue stats
         'timestamp': datetime.now().isoformat()
     }
 
     try:
         # Find all JSON objects in the text
         for line in text.split('\n'):
-            # Extract JSON from log line (format: timestamp|...|[INFO] {json})
             if '{"receiver-stats"' in line or '{"sender-stats"' in line:
-                # Find the JSON part
                 json_start = line.find('{')
                 if json_start == -1:
                     continue
@@ -145,13 +158,23 @@ def parse_rist_json_stats(text: str) -> Dict:
                         flow = rx['flowinstant']
                         stats = flow.get('stats', {})
 
+                        metrics['flow_id'] = flow.get('flow_id')
                         metrics['quality'] = stats.get('quality', 0)
+
+                        # Packet stats
                         metrics['packets']['received'] = stats.get('received', 0)
                         metrics['packets']['missing'] = stats.get('missing', 0)
                         metrics['packets']['recovered'] = stats.get('recovered_total', 0)
                         metrics['packets']['reordered'] = stats.get('reordered', 0)
                         metrics['packets']['lost'] = stats.get('lost', 0)
+                        metrics['packets']['dropped_late'] = stats.get('dropped_late', 0)
+                        metrics['packets']['dropped_full'] = stats.get('dropped_full', 0)
+                        metrics['packets']['duplicates'] = stats.get('duplicates', 0)
+                        metrics['packets']['retries'] = stats.get('retries', 0)
                         metrics['packets']['recovered_one_retry'] = stats.get('recovered_one_nack', 0)
+                        metrics['packets']['recovered_two_retry'] = stats.get('recovered_two_nacks', 0)
+                        metrics['packets']['recovered_three_retry'] = stats.get('recovered_three_nacks', 0)
+                        metrics['packets']['recovered_more_retry'] = stats.get('recovered_more_nacks', 0)
 
                         # Bandwidth in bps -> Mbps
                         metrics['bandwidth'] = stats.get('bitrate', 0) / 1_000_000
@@ -160,23 +183,34 @@ def parse_rist_json_stats(text: str) -> Dict:
                         metrics['timing']['min_iat'] = stats.get('min_inter_packet_spacing', 0) / 1000
                         metrics['timing']['cur_iat'] = stats.get('cur_inter_packet_spacing', 0) / 1000
                         metrics['timing']['max_iat'] = stats.get('max_inter_packet_spacing', 0) / 1000
+                        metrics['timing']['avg_buffer_time'] = stats.get('avg_buffer_time', 0)
 
-                        # Parse peers
+                        # Missing queue
+                        metrics['missing_queue']['current'] = stats.get('missing_queue', 0)
+                        metrics['missing_queue']['max'] = stats.get('missing_queue_max', 0)
+
+                        # Parse input peers
                         peers = flow.get('peers', [])
                         metrics['peers'] = len(peers)
 
-                        # Calculate average RTT from peers
                         if peers:
                             total_rtt = sum(p.get('stats', {}).get('rtt', 0) for p in peers)
+                            total_avg_rtt = sum(p.get('stats', {}).get('avg_rtt', 0) for p in peers)
                             metrics['rtt'] = total_rtt / len(peers)
+                            metrics['avg_rtt'] = total_avg_rtt / len(peers)
 
-                            # Store peer details
+                            # Store detailed peer info
                             metrics['peer_details'] = [
                                 {
                                     'id': p.get('id'),
                                     'dead': p.get('dead', 0),
                                     'rtt': p.get('stats', {}).get('rtt', 0),
-                                    'bitrate': p.get('stats', {}).get('bitrate', 0) / 1_000_000
+                                    'avg_rtt': p.get('stats', {}).get('avg_rtt', 0),
+                                    'bitrate': p.get('stats', {}).get('bitrate', 0) / 1_000_000,
+                                    'avg_bitrate': p.get('stats', {}).get('avg_bitrate', 0) / 1_000_000,
+                                    'received_data': p.get('stats', {}).get('received_data', 0),
+                                    'received_rtcp': p.get('stats', {}).get('received_rtcp', 0),
+                                    'sent_rtcp': p.get('stats', {}).get('sent_rtcp', 0)
                                 }
                                 for p in peers
                             ]
@@ -187,20 +221,41 @@ def parse_rist_json_stats(text: str) -> Dict:
                     if 'peer' in tx:
                         peer = tx['peer']
                         stats = peer.get('stats', {})
+                        peer_id = peer.get('id')
                         cname = peer.get('cname', '')
 
                         sender_info = {
+                            'id': peer_id,
+                            'flow_id': peer.get('flow_id'),
                             'cname': cname,
+                            'type': peer.get('type', ''),
                             'quality': stats.get('quality', 0),
                             'sent': stats.get('sent', 0),
+                            'received': stats.get('received', 0),
                             'retransmitted': stats.get('retransmitted', 0),
                             'bandwidth': stats.get('bandwidth', 0) / 1_000_000,
                             'retry_bandwidth': stats.get('retry_bandwidth', 0) / 1_000_000,
-                            'rtt': stats.get('rtt', 0)
+                            'bandwidth_skipped': stats.get('bandwidth_skipped', 0),
+                            'bloat_skipped': stats.get('bloat_skipped', 0),
+                            'retransmit_skipped': stats.get('retransmit_skipped', 0),
+                            'rtt': stats.get('rtt', 0),
+                            'avg_rtt': stats.get('avg_rtt', 0),
+                            'retry_buffer_size': stats.get('retry_buffer_size', 0),
+                            'cooldown_time': stats.get('cooldown_time', 0)
                         }
 
-                        # Deduplicate by CNAME - keep latest stats for each sender
-                        existing_idx = next((i for i, s in enumerate(metrics['senders']) if s['cname'] == cname), None)
+                        # Incoming queue stats
+                        queue = tx.get('incoming_queue', {})
+                        if queue:
+                            metrics['incoming_queue'] = {
+                                'size': queue.get('size', 0),
+                                'bytesize': queue.get('bytesize', 0),
+                                'time_length': queue.get('time_length', 0),
+                                'packets_per_second': queue.get('packets_per_second', 0)
+                            }
+
+                        # Deduplicate by peer ID - keep latest stats for each sender
+                        existing_idx = next((i for i, s in enumerate(metrics['senders']) if s['id'] == peer_id), None)
                         if existing_idx is not None:
                             metrics['senders'][existing_idx] = sender_info
                         else:
