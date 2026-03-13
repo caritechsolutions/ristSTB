@@ -28,8 +28,8 @@
 #define KEEPALIVE_TIMEOUT 60
 #define SOCKET_NAME "keepalive.sock"
 #define MAX_CMD_LEN 64
-#define MAX_PATH_LEN 512
-#define MAX_URL_LEN 1024
+#define MAX_PATH_LEN 256
+#define MAX_URL_LEN 512
 
 /* Global state */
 static volatile sig_atomic_t running = 1;
@@ -67,14 +67,20 @@ static void cleanup_and_exit(int code) {
     }
 
     /* Remove socket */
-    char socket_path[MAX_PATH_LEN];
+    char socket_path[MAX_PATH_LEN + 32];
     snprintf(socket_path, sizeof(socket_path), "%s/%s", output_dir, SOCKET_NAME);
     unlink(socket_path);
 
-    /* Remove HLS files */
-    char cmd[MAX_PATH_LEN + 64];
-    snprintf(cmd, sizeof(cmd), "rm -f %s/*.m3u8 %s/*.ts 2>/dev/null", output_dir, output_dir);
-    system(cmd);
+    /* Remove HLS files using unlink instead of system() */
+    char filepath[MAX_PATH_LEN + 64];
+    snprintf(filepath, sizeof(filepath), "%s/stream.m3u8", output_dir);
+    unlink(filepath);
+
+    /* Remove segment files */
+    for (int i = 0; i < 100; i++) {
+        snprintf(filepath, sizeof(filepath), "%s/segment%d.ts", output_dir, i);
+        if (unlink(filepath) != 0 && errno == ENOENT && i > 10) break;
+    }
 
     /* Remove directory if empty */
     rmdir(output_dir);
@@ -83,7 +89,7 @@ static void cleanup_and_exit(int code) {
 }
 
 static int create_socket(const char *dir) {
-    char socket_path[MAX_PATH_LEN];
+    char socket_path[MAX_PATH_LEN + 32];
     snprintf(socket_path, sizeof(socket_path), "%s/%s", dir, SOCKET_NAME);
 
     /* Remove existing socket */
@@ -102,7 +108,15 @@ static int create_socket(const char *dir) {
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
+
+    /* Ensure path fits in sun_path (usually 108 bytes) */
+    if (strlen(socket_path) >= sizeof(addr.sun_path)) {
+        fprintf(stderr, "Socket path too long: %s\n", socket_path);
+        close(sock);
+        return -1;
+    }
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+    addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
 
     if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind");
@@ -143,8 +157,10 @@ static int start_ffmpeg(const char *rist_url, const char *output_path) {
         dup2(pipefd[1], STDERR_FILENO);
         close(pipefd[1]);
 
-        char hls_path[MAX_PATH_LEN];
+        char hls_path[MAX_PATH_LEN + 32];
+        char seg_pattern[MAX_PATH_LEN + 32];
         snprintf(hls_path, sizeof(hls_path), "%s/stream.m3u8", output_path);
+        snprintf(seg_pattern, sizeof(seg_pattern), "%s/segment%%d.ts", output_path);
 
         execlp("ffmpeg", "ffmpeg",
             "-hide_banner",
@@ -165,7 +181,7 @@ static int start_ffmpeg(const char *rist_url, const char *output_path) {
             "-hls_list_size", "4",
             "-hls_flags", "delete_segments+independent_segments",
             "-hls_segment_type", "mpegts",
-            "-hls_segment_filename", "%s/segment%d.ts",
+            "-hls_segment_filename", seg_pattern,
             hls_path,
             NULL);
 
@@ -212,14 +228,18 @@ static void parse_stream_info(const char *line) {
             if (regexec(&regex, line, 3, match, 0) == 0) {
                 char buf[16];
                 int len = match[1].rm_eo - match[1].rm_so;
-                strncpy(buf, line + match[1].rm_so, len);
-                buf[len] = '\0';
-                stream_info.width = atoi(buf);
+                if (len < 15) {
+                    strncpy(buf, line + match[1].rm_so, len);
+                    buf[len] = '\0';
+                    stream_info.width = atoi(buf);
+                }
 
                 len = match[2].rm_eo - match[2].rm_so;
-                strncpy(buf, line + match[2].rm_so, len);
-                buf[len] = '\0';
-                stream_info.height = atoi(buf);
+                if (len < 15) {
+                    strncpy(buf, line + match[2].rm_so, len);
+                    buf[len] = '\0';
+                    stream_info.height = atoi(buf);
+                }
             }
             regfree(&regex);
         }
@@ -322,7 +342,7 @@ static void handle_client(int client_fd) {
     if (strcmp(cmd, "keepalive") == 0) {
         last_keepalive = time(NULL);
         const char *response = "ok\n";
-        write(client_fd, response, strlen(response));
+        (void)write(client_fd, response, strlen(response));
     }
     else if (strcmp(cmd, "info") == 0) {
         pthread_mutex_lock(&info_mutex);
@@ -342,11 +362,11 @@ static void handle_client(int client_fd) {
             stream_info.sample_rate,
             stream_info.bitrate);
         pthread_mutex_unlock(&info_mutex);
-        write(client_fd, json, strlen(json));
+        (void)write(client_fd, json, strlen(json));
     }
     else {
         const char *response = "error: unknown command\n";
-        write(client_fd, response, strlen(response));
+        (void)write(client_fd, response, strlen(response));
     }
 
     close(client_fd);
@@ -354,7 +374,7 @@ static void handle_client(int client_fd) {
 
 static void print_usage(const char *prog) {
     fprintf(stderr, "Usage: %s --rist-url <url> --output <dir>\n", prog);
-    fprintf(stderr, "  --rist-url   RIST input URL (e.g., rist://@:5000)\n");
+    fprintf(stderr, "  --rist-url   RIST input URL (e.g., rist://host:5000)\n");
     fprintf(stderr, "  --output     Output directory for HLS files\n");
     fprintf(stderr, "  --timeout    Keepalive timeout in seconds (default: 60)\n");
 }
@@ -376,9 +396,11 @@ int main(int argc, char *argv[]) {
         switch (opt) {
             case 'r':
                 strncpy(rist_url, optarg, sizeof(rist_url) - 1);
+                rist_url[sizeof(rist_url) - 1] = '\0';
                 break;
             case 'o':
                 strncpy(output_dir, optarg, sizeof(output_dir) - 1);
+                output_dir[sizeof(output_dir) - 1] = '\0';
                 break;
             case 't':
                 timeout = atoi(optarg);
@@ -392,6 +414,12 @@ int main(int argc, char *argv[]) {
 
     if (!rist_url[0] || !output_dir[0]) {
         print_usage(argv[0]);
+        return 1;
+    }
+
+    /* Validate path length */
+    if (strlen(output_dir) > MAX_PATH_LEN - 32) {
+        fprintf(stderr, "Output directory path too long\n");
         return 1;
     }
 

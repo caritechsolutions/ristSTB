@@ -2197,6 +2197,11 @@ def start_preview(gateway_id: str):
     if not output_url:
         raise HTTPException(status_code=400, detail="No enabled outputs found")
 
+    # Remove @ from URL (listener mode -> client mode for ffmpeg)
+    # rist://@host:port -> rist://host:port
+    if output_url.startswith('rist://@'):
+        output_url = 'rist://' + output_url[8:]
+
     preview_dir = os.path.join(PREVIEW_DIR, gateway_id)
     socket_path = os.path.join(preview_dir, 'keepalive.sock')
 
