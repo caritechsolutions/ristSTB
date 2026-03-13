@@ -887,14 +887,15 @@ def _check_cgroup(gateway_id: str) -> dict:
 
 
 def _read_stats_file(service_name: str) -> str:
-    """Read the last line from the stats file"""
+    """Read the last few lines from the stats file to get both receiver and sender stats"""
     stats_file = f"/tmp/ristgateway-stats/{service_name}.txt"
     try:
         if os.path.exists(stats_file):
             with open(stats_file, 'r') as f:
                 lines = f.readlines()
                 if lines:
-                    return lines[-1].strip()
+                    # Return last 5 lines to ensure we get both receiver and sender stats
+                    return '\n'.join(line.strip() for line in lines[-5:])
     except Exception as e:
         logger.error(f"Error reading stats file: {e}")
     return ''
