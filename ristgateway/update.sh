@@ -2,11 +2,33 @@
 # RIST Gateway Update Script
 # Updates and rebuilds the modified librist with rist22rist gateway tool
 # Configuration files are preserved - NOT overwritten
+#
+# Usage:
+#   GITHUB_TOKEN=xxx ./update.sh           # Set token via env
+#   ./update.sh --token ghp_xxxxx          # Set token via arg
+#   ./update.sh                            # Uses SSH or prompts
 
 set -e
 
 INSTALL_DIR="/opt/ristgateway"
 BRANCH="${RIST_BRANCH:-claude/pid-selection-oob-lkWRy}"  # Override with RIST_BRANCH env var
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --token)
+            GITHUB_TOKEN="$2"
+            shift 2
+            ;;
+        --branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # Repository URL - supports SSH, HTTPS with token, or plain HTTPS
 if [ -n "$GITHUB_TOKEN" ]; then

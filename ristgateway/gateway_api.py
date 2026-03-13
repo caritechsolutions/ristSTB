@@ -61,6 +61,9 @@ STATUS_CACHE_TTL = 2.0  # seconds
 _status_cache: Dict[str, Dict] = {}  # {gateway_id: {status, timestamp}}
 _gateway_locks: Dict[str, asyncio.Lock] = {}  # per-gateway async locks (lazy-init)
 
+# CPU tracking for delta calculations
+_cpu_tracking: Dict[str, Dict] = {}  # {gateway_id: {usage_usec, timestamp, cpu_percent}}
+
 def init_gateway_stats(gateway_id: str):
     """Initialize stats storage for a gateway"""
     with stats_lock:
@@ -843,6 +846,7 @@ def run_cmd(args, timeout=5) -> str:
 
 def _check_cgroup(gateway_id: str) -> dict:
     """Check service status via cgroup filesystem - no subprocess, instant"""
+    global _cpu_tracking
     service_name = f"ristgateway-{gateway_id}.service"
     cgroup_path = f"/sys/fs/cgroup/system.slice/{service_name}"
 
@@ -857,6 +861,9 @@ def _check_cgroup(gateway_id: str) -> dict:
 
     # Check if cgroup directory exists (service is running)
     if not os.path.isdir(cgroup_path):
+        # Clear CPU tracking if service stopped
+        if gateway_id in _cpu_tracking:
+            del _cpu_tracking[gateway_id]
         return result
 
     result['running'] = True
@@ -880,6 +887,37 @@ def _check_cgroup(gateway_id: str) -> dict:
             with open(memory_current, 'r') as f:
                 memory_bytes = int(f.read().strip())
                 result['memory_mb'] = round(memory_bytes / (1024 * 1024), 2)
+    except:
+        pass
+
+    # Read CPU usage from cgroup and calculate percentage
+    try:
+        cpu_stat = os.path.join(cgroup_path, 'cpu.stat')
+        if os.path.exists(cpu_stat):
+            with open(cpu_stat, 'r') as f:
+                for line in f:
+                    if line.startswith('usage_usec'):
+                        current_usec = int(line.split()[1])
+                        current_time = time.time()
+
+                        # Calculate CPU percentage from delta
+                        if gateway_id in _cpu_tracking:
+                            prev = _cpu_tracking[gateway_id]
+                            delta_usec = current_usec - prev['usage_usec']
+                            delta_time = current_time - prev['timestamp']
+
+                            if delta_time > 0:
+                                # CPU percent = (cpu_usec / elapsed_usec) * 100
+                                elapsed_usec = delta_time * 1_000_000
+                                cpu_percent = (delta_usec / elapsed_usec) * 100
+                                result['cpu_percent'] = round(cpu_percent, 2)
+
+                        # Store current values for next calculation
+                        _cpu_tracking[gateway_id] = {
+                            'usage_usec': current_usec,
+                            'timestamp': current_time
+                        }
+                        break
     except:
         pass
 

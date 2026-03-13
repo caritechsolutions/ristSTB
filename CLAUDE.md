@@ -2,19 +2,41 @@
 
 ## Deployment to ristgateway1
 
-Use curl with the GitHub raw URL and token to deploy files directly:
+### Full Update (Preferred)
+
+Run the full update script to update all components (librist, API, web UI, stats collector):
 
 ```bash
-# Download and deploy gateway_api.py
+# Download and run update script
 curl -fsSL -H "Authorization: token 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" \
-  "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/gateway_api.py?$(date +%s)" \
-  -o /opt/ristgateway/gateway_api.py
-
-# Restart API after deploy
-systemctl restart ristgateway-api
+  "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/update.sh?$(date +%s)" \
+  -o /tmp/update.sh && chmod +x /tmp/update.sh && \
+  GITHUB_TOKEN=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 /tmp/update.sh
 ```
 
-**Important:** Always add `?$(date +%s)` as cache buster at the end of the URL.
+### Quick API-Only Update
+
+For fast iterations when only gateway_api.py changed:
+
+```bash
+curl -fsSL -H "Authorization: token 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" \
+  "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/gateway_api.py?$(date +%s)" \
+  -o /opt/ristgateway/gateway_api.py && systemctl restart ristgateway-api
+```
+
+### Quick Web UI Update
+
+For web file changes only:
+
+```bash
+for f in index.html login.html style.css app.js; do
+  curl -fsSL -H "Authorization: token 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" \
+    "https://raw.githubusercontent.com/caritechsolutions/ristSTB/claude/pid-selection-oob-lkWRy/ristgateway/web/$f?$(date +%s)" \
+    -o /opt/ristgateway/web/$f
+done
+```
+
+**Important:** Always add `?$(date +%s)` as cache buster at the end of URLs.
 
 ## GitHub Token
 
@@ -36,3 +58,5 @@ timeout 5 curl -s -b /tmp/cookies.txt http://localhost/api/gateways/gateway1/sta
 - Stats files: `/tmp/ristgateway-stats/ristgateway-{gateway_id}.txt`
 - API reads from stats files (no subprocess calls in request handlers)
 - Service status checked via cgroup filesystem (`/sys/fs/cgroup/system.slice/`)
+- CPU percentage calculated from `cpu.stat` usage_usec deltas
+- Memory from `memory.current` in cgroup

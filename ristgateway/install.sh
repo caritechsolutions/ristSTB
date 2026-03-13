@@ -1,11 +1,33 @@
 #!/bin/bash
 # RIST Gateway Installation Script
 # Installs the modified librist with rist22rist gateway tool
+#
+# Usage:
+#   GITHUB_TOKEN=xxx ./install.sh          # Set token via env
+#   ./install.sh --token ghp_xxxxx         # Set token via arg
+#   ./install.sh                           # Uses SSH or prompts
 
 set -e
 
 INSTALL_DIR="/opt/ristgateway"
 BRANCH="${RIST_BRANCH:-claude/pid-selection-oob-lkWRy}"  # Override with RIST_BRANCH env var
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --token)
+            GITHUB_TOKEN="$2"
+            shift 2
+            ;;
+        --branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # Repository URL - supports SSH, HTTPS with token, or plain HTTPS
 # Set GITHUB_TOKEN env var for private repo access, or use SSH
