@@ -602,7 +602,6 @@
         const API_BASE = window.location.origin + '/api';
         const HISTORY_LENGTH = 60;  // 60 seconds of history
         let pollInterval = null;
-        let prevStats = {};
         let interfaceCharts = {};
         let interfaceHistory = {};  // {iface: {rx: [], tx: []}}
 
@@ -896,34 +895,12 @@
                     const canvasId = `chart-${name}`;
                     interfaceCharts[name] = createInterfaceChart(canvasId);
                 }
-
-                // Initialize prevStats
-                for (const [name, iface] of entries) {
-                    prevStats[name] = {
-                        bytes_recv: iface.bytes_recv,
-                        bytes_sent: iface.bytes_sent,
-                        timestamp: Date.now()
-                    };
-                }
             } else {
                 // Update values
                 for (const [name, iface] of entries) {
-                    const now = Date.now();
-
-                    // Calculate rates
-                    let rxRate = 0, txRate = 0;
-                    if (prevStats[name]) {
-                        const timeDiff = (now - prevStats[name].timestamp) / 1000;  // seconds
-                        if (timeDiff > 0) {
-                            rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
-                            txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
-                        }
-                    }
-                    prevStats[name] = {
-                        bytes_recv: iface.bytes_recv,
-                        bytes_sent: iface.bytes_sent,
-                        timestamp: now
-                    };
+                    // Use pre-calculated rates from API (calculated by backend collector)
+                    const rxRate = iface.rx_rate || 0;
+                    const txRate = iface.tx_rate || 0;
 
                     // Update DOM elements
                     const statusEl = document.getElementById(`status-${name}`);

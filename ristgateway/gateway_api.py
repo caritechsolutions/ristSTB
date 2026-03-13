@@ -1801,6 +1801,17 @@ def system_info():
     net_if_stats = psutil.net_if_stats()
     net_io_counters = psutil.net_io_counters(pernic=True)
 
+    # Get latest rates from the background collector
+    latest_rates = {}
+    with interface_history_lock:
+        for iface, history in interface_history.items():
+            if history:
+                latest = history[-1]  # Get most recent data point
+                latest_rates[iface] = {
+                    'rx_rate': latest.get('rx_rate', 0),
+                    'tx_rate': latest.get('tx_rate', 0)
+                }
+
     interfaces = {}
     for iface, addrs in net_if_addrs.items():
         if iface.startswith('lo') or iface.startswith('docker') or iface.startswith('br-') or iface.startswith('veth'):
@@ -1820,6 +1831,9 @@ def system_info():
             elif addr.family.name == 'AF_PACKET':
                 mac = addr.address
 
+        # Get calculated rates from background collector
+        rates = latest_rates.get(iface, {'rx_rate': 0, 'tx_rate': 0})
+
         interfaces[iface] = {
             'ipv4': ipv4,
             'ipv6': ipv6,
@@ -1834,7 +1848,9 @@ def system_info():
             'errors_in': io.errin if io else 0,
             'errors_out': io.errout if io else 0,
             'drops_in': io.dropin if io else 0,
-            'drops_out': io.dropout if io else 0
+            'drops_out': io.dropout if io else 0,
+            'rx_rate': rates['rx_rate'],  # Calculated bytes/sec from collector
+            'tx_rate': rates['tx_rate']   # Calculated bytes/sec from collector
         }
 
     # System uptime
