@@ -221,13 +221,34 @@ deactivate
 # Copy web files
 cp -r "$INSTALL_DIR/ristSTB/ristgateway/web" "$INSTALL_DIR/"
 cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_api.py" "$INSTALL_DIR/"
+cp "$INSTALL_DIR/ristSTB/ristgateway/stats_collector.sh" "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/stats_collector.sh"
 cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_config.yaml" /etc/ristgateway/ 2>/dev/null || true
+
+# Create shared memory directory for stats (RAM-backed, no disk I/O)
+mkdir -p /dev/shm/ristgateway-stats
+
+# Create systemd service for stats collector
+cat > /etc/systemd/system/ristgateway-stats.service << 'EOF'
+[Unit]
+Description=RIST Gateway Stats Collector
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ristgateway/stats_collector.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
 
 # Create systemd service for API
 cat > /etc/systemd/system/ristgateway-api.service << 'EOF'
 [Unit]
 Description=RIST Gateway Web API
-After=network.target
+After=network.target ristgateway-stats.service
 
 [Service]
 Type=simple
@@ -245,9 +266,11 @@ SyslogIdentifier=ristgateway-api
 WantedBy=multi-user.target
 EOF
 
-# Reload systemd and enable service
+# Reload systemd and enable services
 systemctl daemon-reload
+systemctl enable ristgateway-stats.service
 systemctl enable ristgateway-api.service
+systemctl start ristgateway-stats.service
 systemctl start ristgateway-api.service
 
 echo ""
