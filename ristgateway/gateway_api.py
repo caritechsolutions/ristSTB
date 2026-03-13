@@ -64,6 +64,119 @@ _gateway_locks: Dict[str, asyncio.Lock] = {}  # per-gateway async locks (lazy-in
 # CPU tracking for delta calculations
 _cpu_tracking: Dict[str, Dict] = {}  # {gateway_id: {usage_usec, timestamp, cpu_percent}}
 
+# Interface bandwidth history (for server stats page)
+INTERFACE_HISTORY_SIZE = 1800  # 30 minutes at 1 sample per second
+INTERFACE_HISTORY_FILE = '/var/lib/ristgateway/interface_history.json'
+interface_history: Dict[str, deque] = {}  # {interface_name: deque of {timestamp, rx_bytes, tx_bytes}}
+interface_prev_stats: Dict[str, Dict] = {}  # Previous stats for rate calculation
+interface_history_lock = threading.Lock()
+interface_collector_thread = None
+interface_collector_running = False
+
+def init_interface_history():
+    """Load interface history from file if exists"""
+    global interface_history
+    os.makedirs(os.path.dirname(INTERFACE_HISTORY_FILE), exist_ok=True)
+    if os.path.exists(INTERFACE_HISTORY_FILE):
+        try:
+            with open(INTERFACE_HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+                for iface, points in data.items():
+                    interface_history[iface] = deque(points, maxlen=INTERFACE_HISTORY_SIZE)
+            logger.info(f"Loaded interface history for {len(interface_history)} interfaces")
+        except Exception as e:
+            logger.warning(f"Failed to load interface history: {e}")
+
+def save_interface_history():
+    """Save interface history to file"""
+    try:
+        with interface_history_lock:
+            data = {iface: list(points) for iface, points in interface_history.items()}
+        with open(INTERFACE_HISTORY_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning(f"Failed to save interface history: {e}")
+
+def collect_interface_stats():
+    """Background thread to collect interface bandwidth stats"""
+    global interface_collector_running, interface_prev_stats
+    logger.info("Interface stats collector started")
+
+    last_save = time.time()
+
+    while interface_collector_running:
+        try:
+            net_io = psutil.net_io_counters(pernic=True)
+            net_if_stats = psutil.net_if_stats()
+            now = time.time()
+
+            with interface_history_lock:
+                for iface, io in net_io.items():
+                    # Skip virtual interfaces
+                    if iface.startswith('lo') or iface.startswith('docker') or \
+                       iface.startswith('br-') or iface.startswith('veth'):
+                        continue
+
+                    stats = net_if_stats.get(iface)
+                    if not stats or not stats.isup:
+                        continue
+
+                    # Calculate rates
+                    rx_rate = 0
+                    tx_rate = 0
+                    if iface in interface_prev_stats:
+                        prev = interface_prev_stats[iface]
+                        time_diff = now - prev['timestamp']
+                        if time_diff > 0:
+                            rx_rate = (io.bytes_recv - prev['rx_bytes']) / time_diff
+                            tx_rate = (io.bytes_sent - prev['tx_bytes']) / time_diff
+
+                    interface_prev_stats[iface] = {
+                        'rx_bytes': io.bytes_recv,
+                        'tx_bytes': io.bytes_sent,
+                        'timestamp': now
+                    }
+
+                    # Initialize history deque if needed
+                    if iface not in interface_history:
+                        interface_history[iface] = deque(maxlen=INTERFACE_HISTORY_SIZE)
+
+                    # Add data point
+                    interface_history[iface].append({
+                        'timestamp': now,
+                        'rx_rate': rx_rate,
+                        'tx_rate': tx_rate,
+                        'rx_bytes': io.bytes_recv,
+                        'tx_bytes': io.bytes_sent
+                    })
+
+            # Save to file every 60 seconds
+            if now - last_save > 60:
+                save_interface_history()
+                last_save = now
+
+        except Exception as e:
+            logger.error(f"Interface stats collection error: {e}")
+
+        time.sleep(1)
+
+    # Save on shutdown
+    save_interface_history()
+    logger.info("Interface stats collector stopped")
+
+def start_interface_collector():
+    """Start the interface stats collector thread"""
+    global interface_collector_thread, interface_collector_running
+    if interface_collector_thread is None or not interface_collector_thread.is_alive():
+        interface_collector_running = True
+        interface_collector_thread = threading.Thread(target=collect_interface_stats, daemon=True)
+        interface_collector_thread.start()
+
+def stop_interface_collector():
+    """Stop the interface stats collector thread"""
+    global interface_collector_running
+    interface_collector_running = False
+
 def init_gateway_stats(gateway_id: str):
     """Initialize stats storage for a gateway"""
     with stats_lock:
@@ -1208,8 +1321,14 @@ async def lifespan(app: FastAPI):
     # No background poller - stats collected on-demand via /stats endpoint
     # History builds up as client polls the stats endpoint
 
+    # Start interface bandwidth collector for server stats
+    init_interface_history()
+    start_interface_collector()
+
     yield
 
+    # Stop interface collector
+    stop_interface_collector()
     logger.info("RIST Gateway API shutting down...")
 
 app = FastAPI(
@@ -1769,6 +1888,23 @@ def system_info():
         "interfaces": interfaces,
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/api/system/interface-history", dependencies=[Depends(auth_required)])
+def get_interface_history(minutes: int = 30):
+    """Get interface bandwidth history for graphing"""
+    # Limit to max 30 minutes (1800 seconds)
+    minutes = min(minutes, 30)
+    cutoff = time.time() - (minutes * 60)
+
+    result = {}
+    with interface_history_lock:
+        for iface, points in interface_history.items():
+            # Filter to requested time range
+            filtered = [p for p in points if p['timestamp'] >= cutoff]
+            if filtered:
+                result[iface] = filtered
+
+    return result
 
 # =============================================================================
 # Config Backup/Restore Endpoints

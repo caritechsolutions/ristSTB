@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Stats - RIST Gateway</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -128,7 +130,7 @@
         .stat-value {
             font-weight: 500;
             font-size: 13px;
-            font-family: monospace;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .stat-value.green { color: var(--accent-green); }
@@ -171,67 +173,6 @@
         .progress-fill.blue { background: var(--accent-blue); }
         .progress-fill.orange { background: var(--accent-orange); }
         .progress-fill.red { background: var(--accent-red); }
-
-        .interface-card {
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 12px;
-        }
-
-        .interface-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .interface-name {
-            font-weight: 600;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .interface-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 10px;
-        }
-
-        .interface-status.up {
-            background: rgba(34, 197, 94, 0.15);
-            color: var(--accent-green);
-        }
-
-        .interface-status.down {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--accent-red);
-        }
-
-        .interface-stats {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-        }
-
-        .interface-stat {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-        }
-
-        .interface-stat .label {
-            color: var(--text-secondary);
-        }
-
-        .interface-stat .value {
-            font-family: monospace;
-        }
 
         .cpu-cores {
             display: grid;
@@ -276,6 +217,187 @@
 
         .spinning {
             animation: spin 1s linear infinite;
+        }
+
+        /* Interface Cards - Improved Layout */
+        .interface-card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .interface-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .interface-name {
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .interface-name svg {
+            color: var(--accent-blue);
+        }
+
+        .interface-badges {
+            display: flex;
+            gap: 8px;
+        }
+
+        .interface-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        .interface-status.up {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .interface-status.down {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .interface-info {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-item {
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .info-item .label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-item .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .bandwidth-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .bandwidth-box {
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .bandwidth-box .direction {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .bandwidth-box .rate {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .bandwidth-box .rate.rx { color: var(--accent-green); }
+        .bandwidth-box .rate.tx { color: var(--accent-blue); }
+
+        .bandwidth-box .total {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .packet-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+
+        .packet-stat {
+            text-align: center;
+            padding: 8px;
+        }
+
+        .packet-stat .label {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .packet-stat .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title svg {
+            color: var(--accent-blue);
+        }
+
+        @media (max-width: 900px) {
+            .interface-info {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .packet-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .interface-info {
+                grid-template-columns: 1fr;
+            }
+            .bandwidth-stats {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -436,21 +558,23 @@
         </div>
 
         <!-- Network Interfaces -->
-        <div class="stat-card">
-            <h3>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-                Network Interfaces
-            </h3>
-            <div id="interfaces"></div>
+        <div class="section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                <line x1="6" y1="6" x2="6.01" y2="6"/>
+                <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+            Network Interfaces
         </div>
+        <div id="interfaces"></div>
     </main>
 
     <script>
         const API_BASE = window.location.origin + '/api';
         let pollInterval = null;
         let prevStats = {};
+        let interfaceCharts = {};
 
         async function checkAuth() {
             try {
@@ -476,7 +600,7 @@
             if (bytes === 0) return '0 B/s';
             const k = 1024;
             const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
@@ -493,6 +617,127 @@
             if (percent < 60) return 'green';
             if (percent < 85) return 'orange';
             return 'red';
+        }
+
+        function createInterfaceChart(canvasId, interfaceName) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return null;
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'RX',
+                            data: [],
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'TX',
+                            data: [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#a0a0b0',
+                                usePointStyle: true,
+                                pointStyle: 'line',
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1a1a24',
+                            titleColor: '#ffffff',
+                            bodyColor: '#a0a0b0',
+                            borderColor: '#2a2a3a',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatBytesRate(context.raw.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'minute',
+                                displayFormats: {
+                                    minute: 'HH:mm'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(42, 42, 58, 0.5)'
+                            },
+                            ticks: {
+                                color: '#a0a0b0',
+                                font: { size: 10 },
+                                maxTicksLimit: 6
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(42, 42, 58, 0.5)'
+                            },
+                            ticks: {
+                                color: '#a0a0b0',
+                                font: { size: 10 },
+                                callback: function(value) {
+                                    return formatBytesRate(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            return chart;
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/system/interface-history?minutes=30`, { credentials: 'include' });
+                if (!response.ok) return;
+
+                const history = await response.json();
+
+                for (const [iface, points] of Object.entries(history)) {
+                    if (interfaceCharts[iface]) {
+                        const rxData = points.map(p => ({ x: p.timestamp * 1000, y: p.rx_rate }));
+                        const txData = points.map(p => ({ x: p.timestamp * 1000, y: p.tx_rate }));
+
+                        interfaceCharts[iface].data.datasets[0].data = rxData;
+                        interfaceCharts[iface].data.datasets[1].data = txData;
+                        interfaceCharts[iface].update('none');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
         }
 
         async function loadStats() {
@@ -573,27 +818,31 @@
             document.getElementById('disk-free').textContent = formatBytes(data.disk.free);
 
             // Network Interfaces
+            updateInterfaces(data.interfaces);
+        }
+
+        function updateInterfaces(interfaces) {
             const interfacesDiv = document.getElementById('interfaces');
-            const interfaces = Object.entries(data.interfaces);
+            const entries = Object.entries(interfaces);
 
-            if (interfaces.length === 0) {
+            if (entries.length === 0) {
                 interfacesDiv.innerHTML = '<p style="color: var(--text-secondary)">No network interfaces found</p>';
-            } else {
-                interfacesDiv.innerHTML = interfaces.map(([name, iface]) => {
-                    // Calculate rates
-                    let rxRate = 0, txRate = 0;
-                    if (prevStats[name]) {
-                        const timeDiff = 2; // 2 seconds
-                        rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
-                        txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
-                    }
-                    prevStats[name] = { bytes_recv: iface.bytes_recv, bytes_sent: iface.bytes_sent };
+                return;
+            }
 
+            // Check if we need to rebuild the DOM
+            const existingCards = interfacesDiv.querySelectorAll('.interface-card');
+            const needsRebuild = existingCards.length !== entries.length ||
+                !entries.every(([name]) => document.getElementById(`iface-${name}`));
+
+            if (needsRebuild) {
+                interfacesDiv.innerHTML = entries.map(([name, iface]) => {
+                    const canvasId = `chart-${name}`;
                     return `
-                        <div class="interface-card">
+                        <div class="interface-card" id="iface-${name}">
                             <div class="interface-header">
                                 <span class="interface-name">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
                                         <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
                                         <line x1="6" y1="6" x2="6.01" y2="6"/>
@@ -601,56 +850,148 @@
                                     </svg>
                                     ${name}
                                 </span>
-                                <span class="interface-status ${iface.is_up ? 'up' : 'down'}">
-                                    ${iface.is_up ? 'UP' : 'DOWN'}
-                                    ${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}
-                                </span>
+                                <div class="interface-badges">
+                                    <span class="interface-status ${iface.is_up ? 'up' : 'down'}" id="status-${name}">
+                                        ${iface.is_up ? 'UP' : 'DOWN'}${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}
+                                    </span>
+                                </div>
                             </div>
-                            <div class="interface-stats">
-                                <div class="interface-stat">
-                                    <span class="label">IPv4</span>
-                                    <span class="value">${iface.ipv4 || '-'}</span>
+
+                            <div class="interface-info">
+                                <div class="info-item">
+                                    <div class="label">IPv4 Address</div>
+                                    <div class="value" id="ipv4-${name}">${iface.ipv4 || '-'}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">MAC</span>
-                                    <span class="value">${iface.mac || '-'}</span>
+                                <div class="info-item">
+                                    <div class="label">MAC Address</div>
+                                    <div class="value" id="mac-${name}">${iface.mac || '-'}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">RX Total</span>
-                                    <span class="value">${formatBytes(iface.bytes_recv)}</span>
+                                <div class="info-item">
+                                    <div class="label">MTU</div>
+                                    <div class="value" id="mtu-${name}">${iface.mtu || '-'}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">TX Total</span>
-                                    <span class="value">${formatBytes(iface.bytes_sent)}</span>
+                                <div class="info-item">
+                                    <div class="label">Link Speed</div>
+                                    <div class="value" id="speed-${name}">${iface.speed > 0 ? iface.speed + ' Mbps' : '-'}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">RX Rate</span>
-                                    <span class="value" style="color: var(--accent-green)">${formatBytesRate(rxRate)}</span>
+                            </div>
+
+                            <div class="bandwidth-stats">
+                                <div class="bandwidth-box">
+                                    <div class="direction">Download (RX)</div>
+                                    <div class="rate rx" id="rx-rate-${name}">0 B/s</div>
+                                    <div class="total" id="rx-total-${name}">Total: ${formatBytes(iface.bytes_recv)}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">TX Rate</span>
-                                    <span class="value" style="color: var(--accent-blue)">${formatBytesRate(txRate)}</span>
+                                <div class="bandwidth-box">
+                                    <div class="direction">Upload (TX)</div>
+                                    <div class="rate tx" id="tx-rate-${name}">0 B/s</div>
+                                    <div class="total" id="tx-total-${name}">Total: ${formatBytes(iface.bytes_sent)}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">Packets RX</span>
-                                    <span class="value">${iface.packets_recv.toLocaleString()}</span>
+                            </div>
+
+                            <div class="packet-stats">
+                                <div class="packet-stat">
+                                    <div class="label">Packets RX</div>
+                                    <div class="value" id="pkts-rx-${name}">${iface.packets_recv.toLocaleString()}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">Packets TX</span>
-                                    <span class="value">${iface.packets_sent.toLocaleString()}</span>
+                                <div class="packet-stat">
+                                    <div class="label">Packets TX</div>
+                                    <div class="value" id="pkts-tx-${name}">${iface.packets_sent.toLocaleString()}</div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">Errors In/Out</span>
-                                    <span class="value" style="color: ${iface.errors_in + iface.errors_out > 0 ? 'var(--accent-red)' : 'inherit'}">${iface.errors_in} / ${iface.errors_out}</span>
+                                <div class="packet-stat">
+                                    <div class="label">Errors</div>
+                                    <div class="value" id="errors-${name}" style="color: ${iface.errors_in + iface.errors_out > 0 ? 'var(--accent-red)' : 'inherit'}">
+                                        ${iface.errors_in} / ${iface.errors_out}
+                                    </div>
                                 </div>
-                                <div class="interface-stat">
-                                    <span class="label">Drops In/Out</span>
-                                    <span class="value" style="color: ${iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit'}">${iface.drops_in} / ${iface.drops_out}</span>
+                                <div class="packet-stat">
+                                    <div class="label">Drops</div>
+                                    <div class="value" id="drops-${name}" style="color: ${iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit'}">
+                                        ${iface.drops_in} / ${iface.drops_out}
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div class="chart-container">
+                                <canvas id="${canvasId}"></canvas>
                             </div>
                         </div>
                     `;
                 }).join('');
+
+                // Create charts for each interface
+                for (const [name] of entries) {
+                    const canvasId = `chart-${name}`;
+                    interfaceCharts[name] = createInterfaceChart(canvasId, name);
+                }
+
+                // Load historical data
+                loadHistory();
+            } else {
+                // Just update values
+                for (const [name, iface] of entries) {
+                    // Calculate rates
+                    let rxRate = 0, txRate = 0;
+                    if (prevStats[name]) {
+                        const timeDiff = 2;
+                        rxRate = (iface.bytes_recv - prevStats[name].bytes_recv) / timeDiff;
+                        txRate = (iface.bytes_sent - prevStats[name].bytes_sent) / timeDiff;
+                    }
+                    prevStats[name] = { bytes_recv: iface.bytes_recv, bytes_sent: iface.bytes_sent };
+
+                    // Update DOM elements
+                    const statusEl = document.getElementById(`status-${name}`);
+                    if (statusEl) {
+                        statusEl.className = `interface-status ${iface.is_up ? 'up' : 'down'}`;
+                        statusEl.textContent = `${iface.is_up ? 'UP' : 'DOWN'}${iface.speed > 0 ? ` - ${iface.speed} Mbps` : ''}`;
+                    }
+
+                    const rxRateEl = document.getElementById(`rx-rate-${name}`);
+                    if (rxRateEl) rxRateEl.textContent = formatBytesRate(rxRate);
+
+                    const txRateEl = document.getElementById(`tx-rate-${name}`);
+                    if (txRateEl) txRateEl.textContent = formatBytesRate(txRate);
+
+                    const rxTotalEl = document.getElementById(`rx-total-${name}`);
+                    if (rxTotalEl) rxTotalEl.textContent = `Total: ${formatBytes(iface.bytes_recv)}`;
+
+                    const txTotalEl = document.getElementById(`tx-total-${name}`);
+                    if (txTotalEl) txTotalEl.textContent = `Total: ${formatBytes(iface.bytes_sent)}`;
+
+                    const pktsRxEl = document.getElementById(`pkts-rx-${name}`);
+                    if (pktsRxEl) pktsRxEl.textContent = iface.packets_recv.toLocaleString();
+
+                    const pktsTxEl = document.getElementById(`pkts-tx-${name}`);
+                    if (pktsTxEl) pktsTxEl.textContent = iface.packets_sent.toLocaleString();
+
+                    const errorsEl = document.getElementById(`errors-${name}`);
+                    if (errorsEl) {
+                        errorsEl.textContent = `${iface.errors_in} / ${iface.errors_out}`;
+                        errorsEl.style.color = iface.errors_in + iface.errors_out > 0 ? 'var(--accent-red)' : 'inherit';
+                    }
+
+                    const dropsEl = document.getElementById(`drops-${name}`);
+                    if (dropsEl) {
+                        dropsEl.textContent = `${iface.drops_in} / ${iface.drops_out}`;
+                        dropsEl.style.color = iface.drops_in + iface.drops_out > 0 ? 'var(--accent-orange)' : 'inherit';
+                    }
+
+                    // Update chart with new data point
+                    if (interfaceCharts[name] && rxRate > 0 || txRate > 0) {
+                        const now = Date.now();
+                        interfaceCharts[name].data.datasets[0].data.push({ x: now, y: rxRate });
+                        interfaceCharts[name].data.datasets[1].data.push({ x: now, y: txRate });
+
+                        // Keep only last 30 minutes
+                        const cutoff = now - (30 * 60 * 1000);
+                        interfaceCharts[name].data.datasets[0].data =
+                            interfaceCharts[name].data.datasets[0].data.filter(p => p.x >= cutoff);
+                        interfaceCharts[name].data.datasets[1].data =
+                            interfaceCharts[name].data.datasets[1].data.filter(p => p.x >= cutoff);
+
+                        interfaceCharts[name].update('none');
+                    }
+                }
             }
         }
 
