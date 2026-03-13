@@ -920,10 +920,13 @@
                     // If we have historical data, populate the chart with timestamps
                     if (interfaceHistory[name] && interfaceCharts[name]) {
                         const hist = interfaceHistory[name];
+                        console.log(`Loading ${hist.rx.length} historical points for ${name}`);
                         interfaceCharts[name].data.labels = (hist.timestamps || []).map(t => formatTime(t));
                         interfaceCharts[name].data.datasets[0].data = [...hist.rx];
                         interfaceCharts[name].data.datasets[1].data = [...hist.tx];
                         interfaceCharts[name].update('none');
+                    } else {
+                        console.log(`No historical data for ${name}, available:`, Object.keys(interfaceHistory));
                     }
                 }
             } else {
@@ -1022,7 +1025,7 @@
                     interfaceHistory[iface].tx = recentPoints.map(p => p.tx_rate || 0);
                 }
 
-                console.log('Loaded historical data for interfaces:', Object.keys(data));
+                console.log('Loaded historical data for interfaces:', Object.keys(data), 'points:', Object.fromEntries(Object.entries(data).map(([k,v]) => [k, v.length])));
             } catch (error) {
                 console.error('Failed to load historical data:', error);
             }
