@@ -23,7 +23,6 @@
             --accent-yellow: #eab308;
             --border-color: #2a2a3a;
             --card-radius: 12px;
-            --transition-speed: 0.2s;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -68,7 +67,7 @@
             font-size: 14px;
             padding: 8px 12px;
             border-radius: 8px;
-            transition: all var(--transition-speed);
+            transition: all 0.2s;
         }
 
         .back-btn:hover {
@@ -78,6 +77,12 @@
 
         .gateway-name { font-size: 1.25rem; font-weight: 600; }
         .gateway-id { color: var(--text-secondary); font-size: 12px; font-family: monospace; }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
         .status-badge {
             display: inline-flex;
@@ -115,10 +120,10 @@
             padding: 1.5rem;
         }
 
-        /* Overview Section */
-        .overview {
+        /* Top Row: Quality Ring + System */
+        .top-row {
             display: grid;
-            grid-template-columns: 180px 1fr;
+            grid-template-columns: 240px 1fr;
             gap: 1.5rem;
             margin-bottom: 1.5rem;
         }
@@ -135,15 +140,14 @@
         }
 
         .quality-ring {
-            width: 120px;
-            height: 120px;
+            width: 180px;
+            height: 180px;
             border-radius: 50%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             position: relative;
-            margin-bottom: 8px;
         }
 
         .quality-ring::before {
@@ -151,7 +155,7 @@
             position: absolute;
             inset: 0;
             border-radius: 50%;
-            padding: 5px;
+            padding: 8px;
             background: conic-gradient(var(--quality-color, var(--accent-green)) calc(var(--quality, 0) * 1%), var(--bg-secondary) 0);
             mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             mask-composite: xor;
@@ -159,190 +163,208 @@
             -webkit-mask-composite: xor;
         }
 
-        .quality-value { font-size: 32px; font-weight: 700; }
-        .quality-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+        .quality-value { font-size: 42px; font-weight: 700; }
+        .quality-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
 
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 1rem;
-        }
-
-        .metric-card {
+        .system-card {
             background: var(--bg-card);
             border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
-            padding: 1rem;
-            text-align: center;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
-        .metric-value { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-        .metric-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; }
+        .system-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
 
-        /* Two Column Layout */
-        .two-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
+        .system-stats {
+            display: flex;
+            gap: 3rem;
+        }
+
+        .system-stat-value { font-size: 28px; font-weight: 700; }
+        .system-stat-label { font-size: 11px; color: var(--text-secondary); }
+
+        /* Section Card */
+        .section {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
             margin-bottom: 1.5rem;
         }
 
-        .card {
-            background: var(--bg-card);
-            border-radius: var(--card-radius);
-            border: 1px solid var(--border-color);
-        }
-
-        .card-header {
-            padding: 1rem;
+        .section-header {
+            padding: 1rem 1.5rem;
             border-bottom: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .card-title {
-            font-size: 13px;
+        .section-title {
+            font-size: 14px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
-        .card-title.input { color: var(--accent-cyan); }
-        .card-title.output { color: var(--accent-purple); }
+        .section-title.input { color: var(--accent-cyan); }
+        .section-title.output { color: var(--accent-purple); }
 
-        .card-badge {
-            background: var(--bg-secondary);
-            padding: 4px 10px;
-            border-radius: 12px;
+        .section-title svg { opacity: 0.8; }
+
+        .section-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 13px;
+        }
+
+        .section-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .section-stat-label { color: var(--text-secondary); }
+        .section-stat-value { font-weight: 600; }
+
+        .section-body { padding: 1rem 1.5rem; }
+
+        .peers-label {
             font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
             color: var(--text-secondary);
+            margin-bottom: 0.75rem;
         }
 
-        .card-body { padding: 1rem; }
+        .peer-list { display: flex; flex-direction: column; gap: 8px; }
 
-        /* Peer Items */
-        .peer-item {
+        .peer-row {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 12px;
+            padding: 10px 14px;
             background: var(--bg-secondary);
             border-radius: 8px;
-            margin-bottom: 8px;
+            font-size: 13px;
         }
 
-        .peer-item:last-child { margin-bottom: 0; }
-
-        .peer-indicator {
-            width: 10px;
-            height: 10px;
+        .peer-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
             flex-shrink: 0;
         }
 
-        .peer-indicator.active {
-            background: var(--accent-green);
-            box-shadow: 0 0 8px var(--accent-green);
+        .peer-url {
+            font-family: monospace;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .peer-indicator.dead { background: var(--accent-red); }
-
-        .peer-info { flex: 1; min-width: 0; }
-        .peer-url { font-family: monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .peer-name { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-
-        .peer-stats {
+        .peer-metrics {
             display: flex;
-            gap: 16px;
-            font-size: 11px;
+            gap: 1.5rem;
+            color: var(--text-secondary);
+            flex-shrink: 0;
         }
 
-        .peer-stat {
+        .peer-metric span { color: var(--text-primary); font-weight: 500; }
+
+        .packets-row {
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            gap: 2rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            font-size: 12px;
         }
 
-        .peer-stat-value { font-weight: 600; color: var(--text-primary); }
-        .peer-stat-label { color: var(--text-secondary); }
+        .packet-stat { display: flex; align-items: center; gap: 6px; }
+        .packet-label { color: var(--text-secondary); }
+        .packet-value { font-weight: 600; }
+        .packet-value.green { color: var(--accent-green); }
+        .packet-value.blue { color: var(--accent-blue); }
+        .packet-value.red { color: var(--accent-red); }
+        .packet-value.orange { color: var(--accent-orange); }
 
-        /* Sender Stats */
-        .sender-stats {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
-
-        .sender-stat {
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            padding: 12px;
-            text-align: center;
-        }
-
-        .sender-stat-value { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-        .sender-stat-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
-
-        /* Stats Grid */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 12px;
-            margin-bottom: 1.5rem;
-        }
-
-        .stat-box {
-            background: var(--bg-card);
-            border-radius: var(--card-radius);
-            border: 1px solid var(--border-color);
-            padding: 1rem;
-            text-align: center;
-        }
-
-        .stat-box-value { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-        .stat-box-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
-
-        /* Charts */
+        /* Charts Row */
         .charts-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1.5rem;
         }
 
-        .chart-container { height: 180px; }
-
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .overview { grid-template-columns: 1fr; }
-            .metrics-grid { grid-template-columns: repeat(3, 1fr); }
-            .two-col { grid-template-columns: 1fr; }
-            .stats-row { grid-template-columns: repeat(3, 1fr); }
+        .chart-card {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
         }
 
-        @media (max-width: 640px) {
-            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-            .stats-row { grid-template-columns: repeat(2, 1fr); }
-            .charts-row { grid-template-columns: 1fr; }
+        .chart-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
+        .chart-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .chart-title.input { color: var(--accent-cyan); }
+        .chart-title.output { color: var(--accent-purple); }
+
+        .chart-value { font-size: 18px; font-weight: 700; }
+
+        .chart-body { padding: 1rem; height: 160px; }
+
+        /* Buttons */
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border-radius: 8px;
             font-weight: 500;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             border: none;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+            transition: all 0.2s;
         }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover { background: var(--bg-hover); }
 
         .btn-success { background: var(--accent-green); color: white; }
 
+        /* Not Running */
         .not-running {
             text-align: center;
             padding: 4rem 2rem;
@@ -354,6 +376,125 @@
             font-weight: 600;
             color: var(--text-primary);
             margin-bottom: 8px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow: hidden;
+            transform: scale(0.95);
+            transition: transform 0.2s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title { font-size: 16px; font-weight: 600; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover { color: var(--text-primary); }
+
+        .modal-body { padding: 1.5rem; }
+
+        .player-container {
+            background: #000;
+            border-radius: 8px;
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-placeholder {
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .player-placeholder svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 8px;
+            opacity: 0.5;
+        }
+
+        .video-stats {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .video-stats-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .video-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+
+        .video-stat-label { font-size: 11px; color: var(--text-secondary); }
+        .video-stat-value { font-size: 14px; font-weight: 600; }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .top-row { grid-template-columns: 1fr; }
+            .charts-row { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 640px) {
+            .section-stats { flex-wrap: wrap; gap: 1rem; }
+            .packets-row { flex-wrap: wrap; }
+            .video-stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -372,166 +513,226 @@
                     <div class="gateway-id" id="gateway-id"></div>
                 </div>
             </div>
-            <div class="status-badge stopped" id="status-badge">
-                <span class="status-dot"></span>
-                <span id="status-text">Stopped</span>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="openPreview()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Preview
+                </button>
+                <div class="status-badge stopped" id="status-badge">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Stopped</span>
+                </div>
             </div>
         </div>
     </header>
 
     <main class="main-content" id="main-content">
-        <!-- Overview Section -->
-        <div class="overview">
+        <!-- Top Row: Quality + System -->
+        <div class="top-row">
             <div class="quality-card">
                 <div class="quality-ring" id="quality-ring" style="--quality: 0; --quality-color: var(--accent-green);">
                     <span class="quality-value" id="quality-value">0%</span>
-                    <span class="quality-label">Input Quality</span>
+                    <span class="quality-label">Quality</span>
                 </div>
             </div>
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-value" id="metric-in-bw" style="color: var(--accent-cyan);">0</div>
-                    <div class="metric-label">Input Mbps</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metric-out-bw" style="color: var(--accent-purple);">0</div>
-                    <div class="metric-label">Output Mbps</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metric-rtt" style="color: var(--accent-blue);">0</div>
-                    <div class="metric-label">RTT (ms)</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metric-cpu" style="color: var(--accent-orange);">-</div>
-                    <div class="metric-label">CPU %</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" id="metric-mem" style="color: var(--accent-green);">-</div>
-                    <div class="metric-label">Memory MB</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Input / Output Peers -->
-        <div class="two-col">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title input">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 19V5M5 12l7-7 7 7"/>
-                        </svg>
-                        Input Peers
-                    </span>
-                    <span class="card-badge" id="input-count">0 peers</span>
-                </div>
-                <div class="card-body" id="input-peers">
-                    <div class="peer-item" style="justify-content: center; color: var(--text-secondary);">
-                        No input peers
+            <div class="system-card">
+                <div class="system-title">System Resources</div>
+                <div class="system-stats">
+                    <div>
+                        <div class="system-stat-value" id="sys-cpu" style="color: var(--accent-orange);">-</div>
+                        <div class="system-stat-label">CPU %</div>
                     </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title output">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 5v14M5 12l7 7 7-7"/>
-                        </svg>
-                        Output
-                    </span>
-                    <span class="card-badge" id="output-quality">-</span>
-                </div>
-                <div class="card-body" id="output-section">
-                    <div id="output-peers"></div>
-                    <div class="sender-stats" id="sender-stats" style="margin-top: 12px;">
-                        <div class="sender-stat">
-                            <div class="sender-stat-value" id="sender-sent">0</div>
-                            <div class="sender-stat-label">Packets Sent</div>
-                        </div>
-                        <div class="sender-stat">
-                            <div class="sender-stat-value" id="sender-retx" style="color: var(--accent-orange);">0</div>
-                            <div class="sender-stat-label">Retransmitted</div>
-                        </div>
-                        <div class="sender-stat">
-                            <div class="sender-stat-value" id="sender-bw">0</div>
-                            <div class="sender-stat-label">Bandwidth Mbps</div>
-                        </div>
-                        <div class="sender-stat">
-                            <div class="sender-stat-value" id="sender-rtt">0</div>
-                            <div class="sender-stat-label">RTT (ms)</div>
-                        </div>
+                    <div>
+                        <div class="system-stat-value" id="sys-mem" style="color: var(--accent-blue);">-</div>
+                        <div class="system-stat-label">Memory MB</div>
+                    </div>
+                    <div>
+                        <div class="system-stat-value" id="sys-uptime">-</div>
+                        <div class="system-stat-label">Uptime</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Packet Statistics -->
-        <div class="stats-row">
-            <div class="stat-box">
-                <div class="stat-box-value" id="pkt-received" style="color: var(--accent-green);">0</div>
-                <div class="stat-box-label">Received</div>
+        <!-- INPUT Section -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title input">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 19V5M5 12l7-7 7 7"/>
+                    </svg>
+                    INPUT
+                </div>
+                <div class="section-stats">
+                    <div class="section-stat">
+                        <span class="section-stat-label">Bandwidth:</span>
+                        <span class="section-stat-value" id="input-bw">0 Mbps</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">RTT:</span>
+                        <span class="section-stat-value" id="input-rtt">0 ms</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Quality:</span>
+                        <span class="section-stat-value" id="input-quality">0%</span>
+                    </div>
+                </div>
             </div>
-            <div class="stat-box">
-                <div class="stat-box-value" id="pkt-recovered" style="color: var(--accent-blue);">0</div>
-                <div class="stat-box-label">Recovered</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-box-value" id="pkt-lost" style="color: var(--accent-red);">0</div>
-                <div class="stat-box-label">Lost</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-box-value" id="pkt-missing" style="color: var(--accent-orange);">0</div>
-                <div class="stat-box-label">Missing</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-box-value" id="pkt-reordered" style="color: var(--accent-purple);">0</div>
-                <div class="stat-box-label">Reordered</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-box-value" id="iat-cur" style="color: var(--accent-cyan);">0</div>
-                <div class="stat-box-label">Jitter (ms)</div>
+            <div class="section-body">
+                <div class="peers-label">Connected Peers</div>
+                <div class="peer-list" id="input-peers">
+                    <div class="peer-row" style="justify-content: center; color: var(--text-secondary);">
+                        No input peers configured
+                    </div>
+                </div>
+                <div class="packets-row">
+                    <div class="packet-stat">
+                        <span class="packet-label">Received:</span>
+                        <span class="packet-value green" id="pkt-received">0</span>
+                    </div>
+                    <div class="packet-stat">
+                        <span class="packet-label">Recovered:</span>
+                        <span class="packet-value blue" id="pkt-recovered">0</span>
+                    </div>
+                    <div class="packet-stat">
+                        <span class="packet-label">Lost:</span>
+                        <span class="packet-value red" id="pkt-lost">0</span>
+                    </div>
+                    <div class="packet-stat">
+                        <span class="packet-label">Missing:</span>
+                        <span class="packet-value orange" id="pkt-missing">0</span>
+                    </div>
+                    <div class="packet-stat">
+                        <span class="packet-label">Reordered:</span>
+                        <span class="packet-value" id="pkt-reordered">0</span>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Charts -->
+        <!-- OUTPUT Section -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title output">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12l7 7 7-7"/>
+                    </svg>
+                    OUTPUT
+                </div>
+                <div class="section-stats">
+                    <div class="section-stat">
+                        <span class="section-stat-label">Bandwidth:</span>
+                        <span class="section-stat-value" id="output-bw">0 Mbps</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Sent:</span>
+                        <span class="section-stat-value" id="output-sent">0</span>
+                    </div>
+                    <div class="section-stat">
+                        <span class="section-stat-label">Retransmitted:</span>
+                        <span class="section-stat-value" id="output-retx">0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="section-body">
+                <div class="peers-label">Connected Peers</div>
+                <div class="peer-list" id="output-peers">
+                    <div class="peer-row" style="justify-content: center; color: var(--text-secondary);">
+                        No output peers connected
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
         <div class="charts-row">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Bandwidth History</span>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span class="chart-title input">Input Bandwidth</span>
+                    <span class="chart-value" id="chart-input-bw">0 Mbps</span>
                 </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="bandwidth-chart"></canvas>
-                    </div>
+                <div class="chart-body">
+                    <canvas id="input-bw-chart"></canvas>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">Quality History</span>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span class="chart-title output">Output Bandwidth</span>
+                    <span class="chart-value" id="chart-output-bw">0 Mbps</span>
                 </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="quality-chart"></canvas>
-                    </div>
+                <div class="chart-body">
+                    <canvas id="output-bw-chart"></canvas>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Not Running Overlay -->
+    <!-- Not Running -->
     <div class="not-running" id="not-running" style="display: none;">
         <div class="not-running-title">Gateway Not Running</div>
         <p>Start the gateway to view live statistics</p>
         <button class="btn btn-success" style="margin-top: 1rem;" onclick="startGateway()">Start Gateway</button>
     </div>
 
+    <!-- Preview Modal -->
+    <div class="modal-overlay" id="preview-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Stream Preview</span>
+                <button class="modal-close" onclick="closePreview()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="player-container" id="player-container">
+                    <div class="player-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="4" width="20" height="16" rx="2"/>
+                            <polygon points="10 8 16 12 10 16"/>
+                        </svg>
+                        <div>Click to start preview</div>
+                        <div style="font-size: 11px; margin-top: 4px;">Requires ffmpeg transcoding service</div>
+                    </div>
+                </div>
+                <div class="video-stats">
+                    <div class="video-stats-title">Stream Information</div>
+                    <div class="video-stats-grid">
+                        <div>
+                            <div class="video-stat-label">Resolution</div>
+                            <div class="video-stat-value" id="vid-resolution">-</div>
+                        </div>
+                        <div>
+                            <div class="video-stat-label">Codec</div>
+                            <div class="video-stat-value" id="vid-codec">-</div>
+                        </div>
+                        <div>
+                            <div class="video-stat-label">Framerate</div>
+                            <div class="video-stat-value" id="vid-fps">-</div>
+                        </div>
+                        <div>
+                            <div class="video-stat-label">Bitrate</div>
+                            <div class="video-stat-value" id="vid-bitrate">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = window.location.origin + '/api';
         const gatewayId = window.location.pathname.split('/').pop();
         let gateway = null;
-        let bandwidthChart = null;
-        let qualityChart = null;
+        let inputBwChart = null;
+        let outputBwChart = null;
         let pollInterval = null;
+        let inputBwHistory = [];
+        let outputBwHistory = [];
+        const HISTORY_LENGTH = 60;
 
         async function checkAuth() {
             try {
@@ -581,46 +782,38 @@
             const inputs = gateway.inputs || [];
             const outputs = gateway.outputs || [];
 
-            document.getElementById('input-count').textContent = `${inputs.length} peer${inputs.length !== 1 ? 's' : ''}`;
-
             const inputList = document.getElementById('input-peers');
             if (inputs.length > 0) {
                 inputList.innerHTML = inputs.map((p, i) => `
-                    <div class="peer-item" data-peer-index="${i}">
-                        <div class="peer-indicator active"></div>
-                        <div class="peer-info">
-                            <div class="peer-url">${escapeHtml(p.url)}</div>
-                            ${p.name ? `<div class="peer-name">${escapeHtml(p.name)}</div>` : ''}
-                        </div>
-                        <div class="peer-stats">
-                            <div class="peer-stat">
-                                <span class="peer-stat-value" id="peer-rtt-${i}">-</span>
-                                <span class="peer-stat-label">RTT</span>
-                            </div>
-                            <div class="peer-stat">
-                                <span class="peer-stat-value" id="peer-bw-${i}">-</span>
-                                <span class="peer-stat-label">Mbps</span>
-                            </div>
+                    <div class="peer-row" data-peer-index="${i}">
+                        <div class="peer-dot"></div>
+                        <div class="peer-url">${escapeHtml(p.url)}</div>
+                        <div class="peer-metrics">
+                            <span>RTT: <span id="peer-rtt-${i}">-</span></span>
+                            <span>BW: <span id="peer-bw-${i}">-</span></span>
+                            <span>Quality: <span id="peer-quality-${i}">-</span></span>
                         </div>
                     </div>
                 `).join('');
             } else {
-                inputList.innerHTML = '<div class="peer-item" style="justify-content: center; color: var(--text-secondary);">No input peers</div>';
+                inputList.innerHTML = '<div class="peer-row" style="justify-content: center; color: var(--text-secondary);">No input peers configured</div>';
             }
 
             const outputList = document.getElementById('output-peers');
             if (outputs.length > 0) {
-                outputList.innerHTML = outputs.map(p => `
-                    <div class="peer-item">
-                        <div class="peer-indicator active"></div>
-                        <div class="peer-info">
-                            <div class="peer-url">${escapeHtml(p.url)}</div>
-                            ${p.name ? `<div class="peer-name">${escapeHtml(p.name)}</div>` : ''}
+                outputList.innerHTML = outputs.map((p, i) => `
+                    <div class="peer-row">
+                        <div class="peer-dot"></div>
+                        <div class="peer-url">${escapeHtml(p.url)}</div>
+                        <div class="peer-metrics">
+                            <span>CNAME: <span id="out-cname-${i}">-</span></span>
+                            <span>Quality: <span id="out-quality-${i}">-</span></span>
+                            <span>RTT: <span id="out-rtt-${i}">-</span></span>
                         </div>
                     </div>
                 `).join('');
             } else {
-                outputList.innerHTML = '<div class="peer-item" style="justify-content: center; color: var(--text-secondary);">No outputs</div>';
+                outputList.innerHTML = '<div class="peer-row" style="justify-content: center; color: var(--text-secondary);">No output peers connected</div>';
             }
         }
 
@@ -639,7 +832,6 @@
 
         function updateStatsDisplay(data) {
             const stats = data.stats || {};
-            if (Object.keys(stats).length === 0) return;
 
             // Quality ring
             const quality = stats.quality || 0;
@@ -649,37 +841,30 @@
                                  quality >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
             qualityRing.style.setProperty('--quality', quality);
             qualityRing.style.setProperty('--quality-color', qualityColor);
-            document.getElementById('quality-value').textContent = quality.toFixed(1) + '%';
+            document.getElementById('quality-value').textContent = quality.toFixed(0) + '%';
             document.getElementById('quality-value').style.color = qualityColor;
 
-            // Metrics
-            document.getElementById('metric-in-bw').textContent = (stats.bandwidth || 0).toFixed(2);
-            document.getElementById('metric-out-bw').textContent = (stats.sender?.bandwidth || 0).toFixed(2);
-            document.getElementById('metric-rtt').textContent = (stats.rtt || 0).toFixed(1);
-            document.getElementById('metric-cpu').textContent = data.cpu_percent !== null ? data.cpu_percent.toFixed(1) : '-';
-            document.getElementById('metric-mem').textContent = data.memory_mb !== null ? data.memory_mb.toFixed(1) : '-';
+            // System stats
+            document.getElementById('sys-cpu').textContent = data.cpu_percent !== null ? data.cpu_percent.toFixed(1) + '%' : '-';
+            document.getElementById('sys-mem').textContent = data.memory_mb !== null ? data.memory_mb.toFixed(0) : '-';
+            document.getElementById('sys-uptime').textContent = formatUptime(data.uptime_seconds);
+
+            // Input section
+            const inputBw = stats.bandwidth || 0;
+            document.getElementById('input-bw').textContent = inputBw.toFixed(2) + ' Mbps';
+            document.getElementById('input-rtt').textContent = (stats.rtt || 0).toFixed(0) + ' ms';
+            document.getElementById('input-quality').textContent = quality.toFixed(0) + '%';
 
             // Per-peer stats
             const peerDetails = stats.peer_details || [];
             peerDetails.forEach((peer, i) => {
                 const rttEl = document.getElementById(`peer-rtt-${i}`);
                 const bwEl = document.getElementById(`peer-bw-${i}`);
+                const qEl = document.getElementById(`peer-quality-${i}`);
                 if (rttEl) rttEl.textContent = (peer.rtt || 0).toFixed(0) + 'ms';
-                if (bwEl) bwEl.textContent = (peer.bitrate || 0).toFixed(2);
+                if (bwEl) bwEl.textContent = (peer.bitrate || 0).toFixed(2) + ' Mbps';
+                if (qEl) qEl.textContent = (peer.quality || 100) + '%';
             });
-
-            // Output / Sender stats
-            const sender = stats.sender || {};
-            const senderQuality = sender.quality || 0;
-            const sqColor = senderQuality >= 95 ? 'var(--accent-green)' :
-                           senderQuality >= 80 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
-            document.getElementById('output-quality').textContent = senderQuality + '% Quality';
-            document.getElementById('output-quality').style.color = sqColor;
-
-            document.getElementById('sender-sent').textContent = formatNumber(sender.sent || 0);
-            document.getElementById('sender-retx').textContent = formatNumber(sender.retransmitted || 0);
-            document.getElementById('sender-bw').textContent = (sender.bandwidth || 0).toFixed(2);
-            document.getElementById('sender-rtt').textContent = (sender.rtt || 0).toFixed(1);
 
             // Packets
             const packets = stats.packets || {};
@@ -689,21 +874,23 @@
             document.getElementById('pkt-missing').textContent = formatNumber(packets.missing || 0);
             document.getElementById('pkt-reordered').textContent = formatNumber(packets.reordered || 0);
 
-            // Jitter (current IAT)
-            const timing = stats.timing || {};
-            document.getElementById('iat-cur').textContent = (timing.cur_iat || 0).toFixed(2);
-        }
+            // Output section
+            const sender = stats.sender || {};
+            const outputBw = sender.bandwidth || 0;
+            document.getElementById('output-bw').textContent = outputBw.toFixed(2) + ' Mbps';
+            document.getElementById('output-sent').textContent = formatNumber(sender.sent || 0);
+            document.getElementById('output-retx').textContent = formatNumber(sender.retransmitted || 0);
 
-        async function loadHistory() {
-            if (!gateway || !gateway.running) return;
-            try {
-                const response = await fetch(`${API_BASE}/gateways/${gatewayId}/stats/history`, { credentials: 'include' });
-                if (!response.ok) return;
-                const data = await response.json();
-                updateCharts(data.history);
-            } catch (error) {
-                console.error('Failed to load history:', error);
-            }
+            // Update charts
+            document.getElementById('chart-input-bw').textContent = inputBw.toFixed(2) + ' Mbps';
+            document.getElementById('chart-output-bw').textContent = outputBw.toFixed(2) + ' Mbps';
+
+            inputBwHistory.push(inputBw);
+            outputBwHistory.push(outputBw);
+            if (inputBwHistory.length > HISTORY_LENGTH) inputBwHistory.shift();
+            if (outputBwHistory.length > HISTORY_LENGTH) outputBwHistory.shift();
+
+            updateCharts();
         }
 
         function initCharts() {
@@ -722,51 +909,55 @@
                 elements: {
                     point: { radius: 0 },
                     line: { tension: 0.3, borderWidth: 2 }
-                }
+                },
+                animation: { duration: 0 }
             };
 
-            const bwCtx = document.getElementById('bandwidth-chart').getContext('2d');
-            bandwidthChart = new Chart(bwCtx, {
+            const inputCtx = document.getElementById('input-bw-chart').getContext('2d');
+            inputBwChart = new Chart(inputCtx, {
                 type: 'line',
                 data: {
-                    labels: [],
+                    labels: Array(HISTORY_LENGTH).fill(''),
                     datasets: [{
                         data: [],
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
                         fill: true
                     }]
                 },
                 options: chartOptions
             });
 
-            const qCtx = document.getElementById('quality-chart').getContext('2d');
-            qualityChart = new Chart(qCtx, {
+            const outputCtx = document.getElementById('output-bw-chart').getContext('2d');
+            outputBwChart = new Chart(outputCtx, {
                 type: 'line',
                 data: {
-                    labels: [],
+                    labels: Array(HISTORY_LENGTH).fill(''),
                     datasets: [{
                         data: [],
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
                         fill: true
                     }]
                 },
-                options: { ...chartOptions, scales: { ...chartOptions.scales, y: { ...chartOptions.scales.y, max: 100 } } }
+                options: chartOptions
             });
         }
 
-        function updateCharts(history) {
-            if (!history || history.length === 0) return;
-            const labels = history.map((_, i) => i);
+        function updateCharts() {
+            inputBwChart.data.datasets[0].data = inputBwHistory;
+            inputBwChart.update('none');
 
-            bandwidthChart.data.labels = labels;
-            bandwidthChart.data.datasets[0].data = history.map(h => h.bandwidth || 0);
-            bandwidthChart.update('none');
+            outputBwChart.data.datasets[0].data = outputBwHistory;
+            outputBwChart.update('none');
+        }
 
-            qualityChart.data.labels = labels;
-            qualityChart.data.datasets[0].data = history.map(h => h.quality || 0);
-            qualityChart.update('none');
+        function openPreview() {
+            document.getElementById('preview-modal').classList.add('active');
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').classList.remove('active');
         }
 
         async function startGateway() {
@@ -787,11 +978,7 @@
         function startPolling() {
             stopPolling();
             loadStats();
-            loadHistory();
-            pollInterval = setInterval(() => {
-                loadStats();
-                loadHistory();
-            }, 2000);
+            pollInterval = setInterval(loadStats, 2000);
         }
 
         function stopPolling() {
@@ -804,11 +991,29 @@
             return num.toString();
         }
 
+        function formatUptime(seconds) {
+            if (!seconds || seconds < 0) return '-';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Close modal on overlay click
+        document.getElementById('preview-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
+
+        // Close modal on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closePreview();
+        });
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
