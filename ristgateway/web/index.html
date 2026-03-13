@@ -755,6 +755,7 @@
                 <div id="restore-info" style="display: none; padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-top: 12px;">
                     <p><strong>Source:</strong> <span id="restore-hostname">-</span></p>
                     <p><strong>Channels:</strong> <span id="restore-count">0</span></p>
+                    <p><strong>Will Auto-Start:</strong> <span id="restore-autostart">0</span></p>
                     <p><strong>Backup Date:</strong> <span id="restore-date">-</span></p>
                 </div>
                 <p style="color: var(--accent-orange); margin-top: 12px; font-size: 13px;">
@@ -1307,8 +1308,11 @@
                     throw new Error('Invalid backup format');
                 }
 
+                const gws = restoreData.gateways;
+                const autostartCount = Object.values(gws).filter(g => g.autostart).length;
                 document.getElementById('restore-hostname').textContent = restoreData.hostname || 'Unknown';
-                document.getElementById('restore-count').textContent = Object.keys(restoreData.gateways).length;
+                document.getElementById('restore-count').textContent = Object.keys(gws).length;
+                document.getElementById('restore-autostart').textContent = autostartCount;
                 document.getElementById('restore-date').textContent = restoreData.timestamp
                     ? new Date(restoreData.timestamp).toLocaleString()
                     : 'Unknown';

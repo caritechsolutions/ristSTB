@@ -1111,6 +1111,8 @@ def stop_gateway(gateway_id: str) -> bool:
     service_name = f"ristgateway-{gateway_id}.service"
 
     try:
+        # Disable so it doesn't start on reboot
+        subprocess.run(['systemctl', 'disable', service_name], capture_output=True, timeout=10)
         result = subprocess.run(['systemctl', 'stop', service_name], capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
@@ -1436,6 +1438,9 @@ def api_start_gateway(gateway_id: str):
         raise HTTPException(status_code=400, detail="Gateway needs at least one input and one output")
 
     if start_gateway(gateway_id, gw):
+        # Save running state to config (persists across restarts)
+        gw['autostart'] = True
+        save_config(config)
         # Update status cache immediately
         status = get_gateway_status(gateway_id)
         update_cached_status(gateway_id, status['running'], status['pid'], status['uptime'])
@@ -1453,6 +1458,9 @@ def api_stop_gateway(gateway_id: str):
         raise HTTPException(status_code=404, detail="Gateway not found")
 
     if stop_gateway(gateway_id):
+        # Save stopped state to config
+        gateways[gateway_id]['autostart'] = False
+        save_config(config)
         # Update status cache immediately
         update_cached_status(gateway_id, False, None, None)
         return {"success": True, "message": f"Gateway {gateway_id} stopped"}
@@ -1661,13 +1669,21 @@ BACKUP_FILE = CONFIG_FILE + '.bak'
 def download_config_backup():
     """Download current configuration as JSON"""
     config = load_config()
+    gateways = config.get('gateways', {})
+
+    # Capture current running state for each gateway
+    for gw_id, gw in gateways.items():
+        status = get_gateway_status(gw_id)
+        # Set autostart based on current running state if not already set
+        if 'autostart' not in gw:
+            gw['autostart'] = status.get('running', False)
 
     # Add metadata
     backup_data = {
         'version': '1.0',
         'timestamp': datetime.now().isoformat(),
         'hostname': os.uname().nodename,
-        'gateways': config.get('gateways', {}),
+        'gateways': gateways,
         'settings': config.get('settings', {})
     }
 
@@ -1705,11 +1721,12 @@ async def restore_config_backup(request: Request):
         if 'gateways' not in backup_data:
             raise HTTPException(status_code=400, detail="Invalid backup: missing gateways")
 
-        # Stop all running gateways first
+        # Stop all running gateways and remove their service files
         config = load_config()
         for gw_id in config.get('gateways', {}):
             try:
                 stop_gateway(gw_id)
+                remove_systemd_service(gw_id)
             except:
                 pass
 
@@ -1735,20 +1752,23 @@ async def restore_config_backup(request: Request):
         for gw_id, gw in new_config.get('gateways', {}).items():
             write_systemd_service(gw_id, gw)
 
-        # Start enabled gateways
+        # Start gateways that were running (autostart=True) in the backup
+        started_count = 0
         for gw_id, gw in new_config.get('gateways', {}).items():
-            if gw.get('enabled', True):
+            if gw.get('autostart', False):
                 try:
-                    start_gateway(gw_id, gw)
+                    if start_gateway(gw_id, gw):
+                        started_count += 1
                 except:
                     pass
 
-        logger.info(f"Config restored from backup with {len(new_config.get('gateways', {}))} gateways")
+        logger.info(f"Config restored from backup with {len(new_config.get('gateways', {}))} gateways, {started_count} started")
 
         return {
             "success": True,
             "message": "Configuration restored",
             "gateway_count": len(new_config.get('gateways', {})),
+            "started_count": started_count,
             "source_hostname": backup_data.get('hostname', 'unknown')
         }
 
@@ -1765,11 +1785,12 @@ def revert_to_backup():
         raise HTTPException(status_code=404, detail="No backup file found")
 
     try:
-        # Stop all running gateways
+        # Stop all running gateways and remove service files
         config = load_config()
         for gw_id in config.get('gateways', {}):
             try:
                 stop_gateway(gw_id)
+                remove_systemd_service(gw_id)
             except:
                 pass
 
@@ -1791,15 +1812,17 @@ def revert_to_backup():
         for gw_id, gw in backup_config.get('gateways', {}).items():
             write_systemd_service(gw_id, gw)
 
-        # Start enabled gateways
+        # Start gateways that were running (autostart=True)
+        started_count = 0
         for gw_id, gw in backup_config.get('gateways', {}).items():
-            if gw.get('enabled', True):
+            if gw.get('autostart', False):
                 try:
-                    start_gateway(gw_id, gw)
+                    if start_gateway(gw_id, gw):
+                        started_count += 1
                 except:
                     pass
 
-        logger.info(f"Config reverted with {len(backup_config.get('gateways', {}))} gateways")
+        logger.info(f"Config reverted with {len(backup_config.get('gateways', {}))} gateways, {started_count} started")
 
         return {
             "success": True,
