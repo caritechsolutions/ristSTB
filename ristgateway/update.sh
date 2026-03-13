@@ -51,6 +51,12 @@ fi
 
 echo "Branch: $BRANCH"
 
+# Ensure ffmpeg is installed (needed for preview feature)
+if ! command -v ffmpeg &> /dev/null; then
+    echo "Installing ffmpeg for preview feature..."
+    apt-get update && apt-get install -y ffmpeg
+fi
+
 # Check if installation exists
 if [ ! -d "$INSTALL_DIR/ristSTB" ]; then
     echo "Error: Installation not found at $INSTALL_DIR"
