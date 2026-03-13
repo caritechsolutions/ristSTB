@@ -54,6 +54,120 @@ STATS_HISTORY_SIZE = 60
 stats_history: Dict[str, deque] = {}
 stats_history_lock = threading.Lock()
 
+# Interface bandwidth history (for server stats page)
+INTERFACE_HISTORY_SIZE = 3600  # 1 hour at 1 sample per second
+INTERFACE_HISTORY_FILE = '/var/lib/ristsender/interface_history.json'
+interface_history: Dict[str, deque] = {}
+interface_prev_stats: Dict[str, Dict] = {}
+interface_history_lock = threading.Lock()
+interface_collector_thread = None
+interface_collector_running = False
+
+def init_interface_history():
+    """Load interface history from file if exists"""
+    global interface_history
+    os.makedirs(os.path.dirname(INTERFACE_HISTORY_FILE), exist_ok=True)
+    if os.path.exists(INTERFACE_HISTORY_FILE):
+        try:
+            with open(INTERFACE_HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+                for iface, points in data.items():
+                    interface_history[iface] = deque(points, maxlen=INTERFACE_HISTORY_SIZE)
+            logger.info(f"Loaded interface history for {len(interface_history)} interfaces")
+        except Exception as e:
+            logger.warning(f"Failed to load interface history: {e}")
+
+def save_interface_history():
+    """Save interface history to file"""
+    try:
+        with interface_history_lock:
+            data = {iface: list(points) for iface, points in interface_history.items()}
+        with open(INTERFACE_HISTORY_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning(f"Failed to save interface history: {e}")
+
+def collect_interface_stats():
+    """Background thread to collect interface statistics"""
+    global interface_collector_running, interface_prev_stats
+    last_save = time.time()
+
+    while interface_collector_running:
+        try:
+            net_io = psutil.net_io_counters(pernic=True)
+            net_if_stats = psutil.net_if_stats()
+            now = time.time()
+
+            with interface_history_lock:
+                for iface, io in net_io.items():
+                    # Skip virtual interfaces
+                    if iface.startswith('lo') or iface.startswith('docker') or \
+                       iface.startswith('br-') or iface.startswith('veth'):
+                        continue
+
+                    stats = net_if_stats.get(iface)
+                    if not stats or not stats.isup:
+                        continue
+
+                    # Calculate rates
+                    rx_rate = 0
+                    tx_rate = 0
+                    if iface in interface_prev_stats:
+                        prev = interface_prev_stats[iface]
+                        time_delta = now - prev['timestamp']
+                        if time_delta > 0:
+                            rx_rate = (io.bytes_recv - prev['bytes_recv']) / time_delta
+                            tx_rate = (io.bytes_sent - prev['bytes_sent']) / time_delta
+
+                    # Store current stats for next calculation
+                    interface_prev_stats[iface] = {
+                        'timestamp': now,
+                        'bytes_recv': io.bytes_recv,
+                        'bytes_sent': io.bytes_sent
+                    }
+
+                    # Initialize history deque if needed
+                    if iface not in interface_history:
+                        interface_history[iface] = deque(maxlen=INTERFACE_HISTORY_SIZE)
+
+                    # Add data point
+                    interface_history[iface].append({
+                        'timestamp': now,
+                        'rx_rate': rx_rate,
+                        'tx_rate': tx_rate,
+                        'rx_bytes': io.bytes_recv,
+                        'tx_bytes': io.bytes_sent
+                    })
+
+            # Save to file every 60 seconds
+            if now - last_save > 60:
+                save_interface_history()
+                last_save = now
+
+        except Exception as e:
+            logger.error(f"Interface stats collection error: {e}")
+
+        time.sleep(1)
+
+    # Save on shutdown
+    save_interface_history()
+    logger.info("Interface stats collector stopped")
+
+def start_interface_collector():
+    """Start the background interface stats collector"""
+    global interface_collector_thread, interface_collector_running
+    interface_collector_running = True
+    interface_collector_thread = threading.Thread(target=collect_interface_stats, daemon=True)
+    interface_collector_thread.start()
+    logger.info("Interface stats collector started")
+
+def stop_interface_collector():
+    """Stop the background interface stats collector"""
+    global interface_collector_running
+    interface_collector_running = False
+    if interface_collector_thread:
+        interface_collector_thread.join(timeout=2)
+
 # =============================================================================
 # Pydantic Models
 # =============================================================================
@@ -395,8 +509,11 @@ def get_system_health() -> dict:
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     logger.info("RIST Sender API starting...")
+    init_interface_history()
+    start_interface_collector()
     yield
     logger.info("RIST Sender API shutting down...")
+    stop_interface_collector()
 
 app = FastAPI(title="RIST Sender API", lifespan=lifespan)
 
@@ -667,19 +784,144 @@ async def system_health(session_id: str = Depends(require_auth)):
 
 @app.get("/api/system/info")
 async def system_info(session_id: str = Depends(require_auth)):
-    """Get system information"""
-    config = load_config()
-    channels = config.get('channels', {})
+    """Get detailed system information"""
+    import platform
 
-    running = sum(1 for ch_id in channels if get_channel_status(ch_id) == 'running')
+    # CPU info
+    cpu_count = psutil.cpu_count(logical=False) or 1
+    cpu_count_logical = psutil.cpu_count(logical=True) or 1
+    cpu_freq = psutil.cpu_freq()
+    cpu_percent_per_core = psutil.cpu_percent(interval=0.1, percpu=True)
+
+    # Memory
+    memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+
+    # Disk
+    disk = psutil.disk_usage('/')
+
+    # Network interfaces
+    net_if_addrs = psutil.net_if_addrs()
+    net_if_stats = psutil.net_if_stats()
+    net_io_counters = psutil.net_io_counters(pernic=True)
+
+    # Get latest rates from the background collector
+    latest_rates = {}
+    with interface_history_lock:
+        for iface, history in interface_history.items():
+            if history:
+                latest = history[-1]
+                latest_rates[iface] = {
+                    'rx_rate': latest.get('rx_rate', 0),
+                    'tx_rate': latest.get('tx_rate', 0)
+                }
+
+    interfaces = {}
+    for iface, addrs in net_if_addrs.items():
+        if iface.startswith('lo') or iface.startswith('docker') or iface.startswith('br-') or iface.startswith('veth'):
+            continue
+
+        stats = net_if_stats.get(iface, None)
+        io = net_io_counters.get(iface, None)
+
+        ipv4 = None
+        ipv6 = None
+        mac = None
+        for addr in addrs:
+            if addr.family.name == 'AF_INET':
+                ipv4 = addr.address
+            elif addr.family.name == 'AF_INET6' and not addr.address.startswith('fe80'):
+                ipv6 = addr.address
+            elif addr.family.name == 'AF_PACKET':
+                mac = addr.address
+
+        rates = latest_rates.get(iface, {'rx_rate': 0, 'tx_rate': 0})
+
+        interfaces[iface] = {
+            'ipv4': ipv4,
+            'ipv6': ipv6,
+            'mac': mac,
+            'is_up': stats.isup if stats else False,
+            'speed': stats.speed if stats else 0,
+            'mtu': stats.mtu if stats else 0,
+            'bytes_sent': io.bytes_sent if io else 0,
+            'bytes_recv': io.bytes_recv if io else 0,
+            'packets_sent': io.packets_sent if io else 0,
+            'packets_recv': io.packets_recv if io else 0,
+            'errors_in': io.errin if io else 0,
+            'errors_out': io.errout if io else 0,
+            'drops_in': io.dropin if io else 0,
+            'drops_out': io.dropout if io else 0,
+            'rx_rate': rates['rx_rate'],
+            'tx_rate': rates['tx_rate']
+        }
+
+    # System uptime
+    boot_time = psutil.boot_time()
+    uptime_seconds = time.time() - boot_time
+
+    # Load average
+    try:
+        load_avg = os.getloadavg()
+    except:
+        load_avg = (0, 0, 0)
 
     return {
-        'total_channels': len(channels),
-        'running_channels': running,
-        'stopped_channels': len(channels) - running,
-        'hostname': os.uname().nodename,
-        'uptime': time.time() - psutil.boot_time()
+        "hostname": os.uname().nodename,
+        "platform": platform.system(),
+        "platform_release": platform.release(),
+        "platform_version": platform.version(),
+        "architecture": platform.machine(),
+        "uptime_seconds": uptime_seconds,
+        "load_average": {
+            "1min": load_avg[0],
+            "5min": load_avg[1],
+            "15min": load_avg[2]
+        },
+        "cpu": {
+            "cores_physical": cpu_count,
+            "cores_logical": cpu_count_logical,
+            "frequency_mhz": cpu_freq.current if cpu_freq else 0,
+            "frequency_max_mhz": cpu_freq.max if cpu_freq else 0,
+            "percent": psutil.cpu_percent(interval=0),
+            "percent_per_core": cpu_percent_per_core
+        },
+        "memory": {
+            "total": memory.total,
+            "available": memory.available,
+            "used": memory.used,
+            "percent": memory.percent
+        },
+        "swap": {
+            "total": swap.total,
+            "used": swap.used,
+            "free": swap.free,
+            "percent": swap.percent
+        },
+        "disk": {
+            "total": disk.total,
+            "used": disk.used,
+            "free": disk.free,
+            "percent": disk.percent
+        },
+        "interfaces": interfaces,
+        "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/api/system/interface-history")
+async def get_interface_history_endpoint(minutes: int = 60, session_id: str = Depends(require_auth)):
+    """Get interface bandwidth history for graphing"""
+    minutes = min(minutes, 60)
+    cutoff = time.time() - (minutes * 60)
+
+    result = {}
+    with interface_history_lock:
+        for iface, points in interface_history.items():
+            filtered = [p for p in points if p['timestamp'] >= cutoff]
+            if filtered:
+                result[iface] = filtered
+
+    return result
 
 # =============================================================================
 # Static Files & HTML Routes
