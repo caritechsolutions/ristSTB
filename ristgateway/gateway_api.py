@@ -1340,6 +1340,7 @@ def create_gateway(gateway: GatewayConfig):
 
     gw_data = {
         'name': gateway.name,
+        'group': gateway.group,
         'enabled': gateway.enabled,
         'status': 'stopped',
         'process_id': None,
@@ -1372,6 +1373,8 @@ def update_gateway(gateway_id: str, update: GatewayUpdate):
 
     if update.name is not None:
         gw['name'] = update.name
+    # Always update group - None or empty string clears it
+    gw['group'] = update.group if update.group else None
     if update.enabled is not None:
         gw['enabled'] = update.enabled
     if update.inputs is not None:
