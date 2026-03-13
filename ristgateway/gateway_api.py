@@ -539,6 +539,34 @@ def collect_stats_from_journal(gateway_id: str, running: bool = True):
         logger.error(f"Error collecting stats from journal for {gateway_id}: {e}")
 
 
+def get_empty_stats() -> Dict:
+    """Return empty/zeroed stats structure"""
+    return {
+        'quality': 0,
+        'peers': 0,
+        'bandwidth': 0,
+        'retry_bandwidth': 0,
+        'rtt': 0,
+        'packets': {
+            'sent': 0,
+            'received': 0,
+            'missing': 0,
+            'reordered': 0,
+            'recovered': 0,
+            'recovered_one_retry': 0,
+            'lost': 0
+        },
+        'timing': {
+            'min_iat': 0,
+            'cur_iat': 0,
+            'max_iat': 0
+        },
+        'peer_details': [],
+        'sender': {},
+        'timestamp': datetime.now().isoformat()
+    }
+
+
 def stats_poller_loop():
     """Background thread that polls stats for all gateways"""
     global stats_poller_running
@@ -555,21 +583,23 @@ def stats_poller_loop():
 
                 service_name = f"ristgateway-{gateway_id}"
 
-                # Check if running (simple, direct call)
-                try:
-                    result = subprocess.run(
-                        ['systemctl', 'is-active', f'{service_name}.service'],
-                        capture_output=True, text=True, timeout=3
-                    )
-                    is_running = result.stdout.strip() == 'active'
-                except:
-                    is_running = False
+                # Check status via cgroup (fast, no subprocess)
+                status = _check_cgroup(gateway_id)
+                is_running = status['running']
 
-                # Update status cache
-                update_cached_status(gateway_id, is_running, None, None)
+                # Update status cache with CPU/memory info
+                update_cached_status(gateway_id, is_running, status.get('pid'), None)
 
-                # Collect stats if running
+                # Store CPU/memory in gateway stats for easy access
+                with stats_lock:
+                    if gateway_id not in gateway_stats:
+                        init_gateway_stats(gateway_id)
+                    gateway_stats[gateway_id]['cpu_percent'] = status.get('cpu_percent')
+                    gateway_stats[gateway_id]['memory_mb'] = status.get('memory_mb')
+                    gateway_stats[gateway_id]['running'] = is_running
+
                 if is_running:
+                    # Collect stats from journalctl
                     try:
                         result = subprocess.run(
                             ['journalctl', '-u', service_name, '-n', '5', '--no-pager', '-o', 'cat'],
@@ -577,10 +607,18 @@ def stats_poller_loop():
                         )
                         if result.returncode == 0 and result.stdout:
                             metrics = parse_rist_json_stats(result.stdout)
-                            if metrics['peers'] > 0 or metrics['packets']['received'] > 0:
+                            metrics['cpu_percent'] = status.get('cpu_percent')
+                            metrics['memory_mb'] = status.get('memory_mb')
+                            if metrics['peers'] > 0 or metrics['packets']['received'] > 0 or metrics['packets']['sent'] > 0:
                                 update_gateway_stats(gateway_id, metrics, True)
                     except Exception as e:
                         logger.debug(f"Error collecting stats for {gateway_id}: {e}")
+                else:
+                    # Gateway stopped - zero out stats
+                    empty_stats = get_empty_stats()
+                    empty_stats['cpu_percent'] = None
+                    empty_stats['memory_mb'] = None
+                    update_gateway_stats(gateway_id, empty_stats, False)
 
             # Sleep for 2 seconds between poll cycles
             for _ in range(20):  # Check every 100ms if we should stop
@@ -1520,32 +1558,33 @@ def system_metrics():
 
 @app.get("/api/gateways/{gateway_id}/stats", dependencies=[Depends(auth_required)])
 def get_gateway_metrics(gateway_id: str):
-    """Get metrics for a gateway from its stats file"""
+    """Get metrics for a gateway from in-memory stats (updated by background poller)"""
     config = load_config()
     gateways = config.get('gateways', {})
 
     if gateway_id not in gateways:
         raise HTTPException(status_code=404, detail=f"Gateway '{gateway_id}' not found")
 
-    service_name = f"ristgateway-{gateway_id}"
-    stats = {}
+    # Read from in-memory stats (populated by stats_poller_loop)
+    stats = get_gateway_stats(gateway_id)
 
-    # Get cgroup status
-    status = _check_cgroup(gateway_id)
-    is_running = status['running']
+    # If no stats yet, return empty structure
+    if not stats:
+        stats = get_empty_stats()
+        stats['running'] = False
+        stats['cpu_percent'] = None
+        stats['memory_mb'] = None
 
-    # Read stats from file
-    if is_running:
-        stats_data = _read_stats_file(service_name)
-        if stats_data:
-            stats = parse_rist_json_stats(stats_data)
+    is_running = stats.get('running', False)
+    cpu_percent = stats.get('cpu_percent')
+    memory_mb = stats.get('memory_mb')
 
     return {
         "gateway_id": gateway_id,
         "running": is_running,
         "stats": stats,
-        "cpu_percent": status.get('cpu_percent'),
-        "memory_mb": status.get('memory_mb'),
+        "cpu_percent": cpu_percent,
+        "memory_mb": memory_mb,
         "timestamp": datetime.now().isoformat()
     }
 
