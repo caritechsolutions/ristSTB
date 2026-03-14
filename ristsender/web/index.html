@@ -408,6 +408,17 @@
 
         .channel-io span { white-space: nowrap; }
 
+        .channel-bandwidth {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--accent-cyan);
+            min-width: 80px;
+            text-align: right;
+        }
+        .channel-bandwidth.inactive {
+            color: var(--text-secondary);
+        }
+
         .channel-status {
             display: inline-flex;
             align-items: center;
@@ -610,7 +621,7 @@
                         <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
                     </svg>
                 </button>
-                <button class="btn btn-secondary btn-icon" onclick="openSettingsModal()" title="Settings">
+                <a href="/settings" class="btn btn-secondary btn-icon" title="Settings">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"/>
                         <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -748,9 +759,36 @@
         </div>
     </div>
 
+    <!-- Preview Modal -->
+    <div class="modal-overlay preview-modal" id="preview-modal">
+        <div class="modal" style="max-width: 800px;">
+            <div class="modal-header">
+                <span class="modal-title">Preview: <span id="preview-channel-name"></span></span>
+                <button class="modal-close" onclick="closePreview()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px;">
+                <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden;">
+                    <video id="preview-video" style="width: 100%; height: 100%;" controls autoplay muted></video>
+                    <div id="preview-loading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-secondary); gap: 12px;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <div id="preview-status">Starting preview...</div>
+                    </div>
+                </div>
+                <div id="preview-info" style="display: none; margin-top: 12px; padding: 10px; background: var(--bg-secondary); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
+                    <span id="preview-resolution">-</span> &bull; <span id="preview-bitrate">-</span>
+                </div>
+                <div id="preview-error" style="display: none; margin-top: 12px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; color: var(--accent-red); font-size: 13px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         const API_BASE = window.location.origin + '/api';
         let channels = {};
+        let channelStats = {};
         let currentFilter = 'all';
         let currentGroup = '';
         let searchQuery = '';
@@ -760,6 +798,9 @@
         let deleteChannelId = null;
         let collapsedGroups = new Set();
         let restoreData = null;
+        let previewChannelId = null;
+        let previewHls = null;
+        let previewKeepaliveInterval = null;
 
         async function checkAuth() {
             try {
@@ -797,9 +838,39 @@
                 channels = data.channels || {};
                 renderChannels();
                 updateStats();
+                loadChannelStats();
             } catch (error) {
                 console.error('Failed to load channels:', error);
             }
+        }
+
+        async function loadChannelStats() {
+            for (const id of Object.keys(channels)) {
+                if (channels[id].status === 'running') {
+                    try {
+                        const response = await fetch(`${API_BASE}/channels/${id}/stats`, { credentials: 'include' });
+                        if (response.ok) {
+                            channelStats[id] = await response.json();
+                        }
+                    } catch (error) {
+                        console.error(`Failed to load stats for ${id}:`, error);
+                    }
+                }
+            }
+            renderChannels();
+        }
+
+        function formatBandwidth(bps) {
+            if (bps >= 1000000) return (bps / 1000000).toFixed(2) + ' Mbps';
+            if (bps >= 1000) return (bps / 1000).toFixed(1) + ' Kbps';
+            return bps + ' bps';
+        }
+
+        function getBandwidthInfo(id) {
+            const stats = channelStats[id];
+            if (!stats || stats.bandwidth_bps === undefined) return { text: '-', active: false };
+            if (stats.bandwidth_bps === 0) return { text: '-', active: false };
+            return { text: formatBandwidth(stats.bandwidth_bps), active: true };
         }
 
         function renderChannels() {
@@ -857,6 +928,7 @@
         function renderChannelRow(id, ch) {
             const isRunning = ch.status === 'running';
             const outputCount = (ch.outputs || []).filter(o => o.enabled !== false).length;
+            const bandwidth = getBandwidthInfo(id);
 
             return `
                 <div class="channel-row" data-id="${id}">
@@ -872,6 +944,7 @@
                         <span title="${escapeHtml(ch.input || '')}">&#8595; ${escapeHtml(ch.input ? ch.input.substring(0, 40) : '-')}</span>
                         <span>&#8593; ${outputCount} output${outputCount !== 1 ? 's' : ''}</span>
                     </div>
+                    <div class="channel-bandwidth ${bandwidth.active ? '' : 'inactive'}" title="Total Bandwidth">${bandwidth.text}</div>
                     <div class="channel-status ${isRunning ? 'running' : 'stopped'}">
                         ${isRunning ? 'Running' : 'Stopped'}
                     </div>
@@ -881,6 +954,11 @@
                             : `<button class="btn btn-success" onclick="startChannel('${id}')">Start</button>`
                         }
                         <button class="btn btn-secondary" onclick="window.location.href='/edit/${id}'">Edit</button>
+                        <button class="btn btn-secondary btn-icon" onclick="showPreview('${id}', '${escapeHtml(ch.name || id)}')" title="Preview" ${isRunning ? '' : 'disabled'}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                        </button>
                         <button class="btn btn-secondary btn-icon" onclick="window.location.href='/stats/${id}'" title="Stats">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 20V10M12 20V4M6 20v-6"/>
@@ -1197,6 +1275,141 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Preview functions
+        async function showPreview(channelId, channelName) {
+            previewChannelId = channelId;
+            document.getElementById('preview-channel-name').textContent = channelName;
+            document.getElementById('preview-modal').classList.add('visible');
+            document.getElementById('preview-loading').style.display = 'flex';
+            document.getElementById('preview-error').style.display = 'none';
+            document.getElementById('preview-info').style.display = 'none';
+            document.getElementById('preview-status').textContent = 'Starting preview...';
+
+            try {
+                const response = await fetch(`${API_BASE}/channels/${channelId}/preview/start`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to start preview');
+                }
+
+                document.getElementById('preview-status').textContent = 'Loading stream...';
+
+                previewKeepaliveInterval = setInterval(() => sendPreviewKeepalive(channelId), 10000);
+
+                startHlsPlayback(channelId);
+            } catch (error) {
+                console.error('Preview error:', error);
+                document.getElementById('preview-loading').style.display = 'none';
+                document.getElementById('preview-error').style.display = 'block';
+                document.getElementById('preview-error').textContent = error.message;
+            }
+        }
+
+        function startHlsPlayback(channelId) {
+            const video = document.getElementById('preview-video');
+            const hlsUrl = `${API_BASE}/channels/${channelId}/preview/stream.m3u8`;
+
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                previewHls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30
+                });
+                previewHls.loadSource(hlsUrl);
+                previewHls.attachMedia(video);
+
+                previewHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    document.getElementById('preview-loading').style.display = 'none';
+                    video.play();
+                    fetchPreviewInfo(channelId);
+                });
+
+                previewHls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        document.getElementById('preview-status').textContent = 'Stream error - retrying...';
+                        document.getElementById('preview-loading').style.display = 'flex';
+                        setTimeout(() => {
+                            if (previewChannelId && previewHls) {
+                                previewHls.loadSource(hlsUrl);
+                            }
+                        }, 2000);
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = hlsUrl;
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('preview-loading').style.display = 'none';
+                    video.play();
+                    fetchPreviewInfo(channelId);
+                });
+            } else {
+                document.getElementById('preview-loading').style.display = 'none';
+                document.getElementById('preview-error').style.display = 'block';
+                document.getElementById('preview-error').textContent = 'HLS not supported in this browser';
+            }
+        }
+
+        async function fetchPreviewInfo(channelId) {
+            try {
+                const response = await fetch(`${API_BASE}/channels/${channelId}/preview/info`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const info = await response.json();
+                    document.getElementById('preview-info').style.display = 'block';
+                    document.getElementById('preview-resolution').textContent = `${info.width}x${info.height}`;
+                    document.getElementById('preview-bitrate').textContent = `${(info.bitrate / 1000000).toFixed(2)} Mbps`;
+                }
+            } catch (error) {
+                console.error('Failed to fetch preview info:', error);
+            }
+        }
+
+        async function sendPreviewKeepalive(channelId) {
+            try {
+                await fetch(`${API_BASE}/channels/${channelId}/preview/keepalive`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Keepalive error:', error);
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').classList.remove('visible');
+
+            if (previewKeepaliveInterval) {
+                clearInterval(previewKeepaliveInterval);
+                previewKeepaliveInterval = null;
+            }
+
+            if (previewHls) {
+                previewHls.destroy();
+                previewHls = null;
+            }
+
+            const video = document.getElementById('preview-video');
+            video.pause();
+            video.src = '';
+            previewChannelId = null;
+        }
+
+        // Close preview on escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closePreview();
+            }
+        });
+
+        // Close preview on modal overlay click
+        document.getElementById('preview-modal')?.addEventListener('click', function(e) {
+            if (e.target === this) closePreview();
+        });
 
         // Close dropdowns when clicking outside
         document.addEventListener('click', function(e) {

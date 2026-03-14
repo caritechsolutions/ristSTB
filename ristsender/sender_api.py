@@ -1098,6 +1098,154 @@ async def change_password(request: PasswordChange, session_id: str = Depends(req
     return {"success": True, "message": "Password changed successfully"}
 
 # =============================================================================
+# Preview (HLS Transcoding)
+# =============================================================================
+
+PREVIEW_DIR = '/dev/shm/ristsender-preview'
+
+def send_to_preview_socket(channel_id: str, command: str) -> Optional[str]:
+    """Send command to ristpreview Unix socket, return response or None"""
+    import socket
+    socket_path = os.path.join(PREVIEW_DIR, channel_id, 'keepalive.sock')
+    if not os.path.exists(socket_path):
+        return None
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        sock.connect(socket_path)
+        sock.send(command.encode())
+        response = sock.recv(1024).decode().strip()
+        sock.close()
+        return response
+    except Exception:
+        return None
+
+@app.post("/api/channels/{channel_id}/preview/start")
+async def start_preview(channel_id: str, session_id: str = Depends(require_auth)):
+    """Start preview transcoder for channel"""
+    config = load_config()
+    channels = config.get('channels', {})
+
+    if channel_id not in channels:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    ch = channels[channel_id]
+    input_url = ch.get('input')
+    if not input_url:
+        raise HTTPException(status_code=400, detail="Channel has no input configured")
+
+    preview_dir = os.path.join(PREVIEW_DIR, channel_id)
+    socket_path = os.path.join(preview_dir, 'keepalive.sock')
+
+    # Check if already running
+    response = send_to_preview_socket(channel_id, "keepalive")
+    if response == "ok":
+        return {
+            "status": "running",
+            "hls_url": f"/api/channels/{channel_id}/preview/stream.m3u8"
+        }
+
+    # Create preview directory
+    os.makedirs(preview_dir, exist_ok=True)
+
+    # Start ristpreview process with UDP input
+    try:
+        proc = subprocess.Popen(
+            [
+                '/usr/local/bin/ristpreview',
+                '--udp-url', input_url,
+                '--output', preview_dir
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ristpreview not installed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start preview: {e}")
+
+    # Wait for socket to appear (up to 5 seconds)
+    for _ in range(50):
+        if os.path.exists(socket_path):
+            response = send_to_preview_socket(channel_id, "keepalive")
+            if response == "ok":
+                break
+        time.sleep(0.1)
+    else:
+        if proc.poll() is not None:
+            raise HTTPException(status_code=500, detail="Preview process exited unexpectedly")
+        raise HTTPException(status_code=500, detail="Preview process not responding")
+
+    return {
+        "status": "started",
+        "hls_url": f"/api/channels/{channel_id}/preview/stream.m3u8"
+    }
+
+@app.post("/api/channels/{channel_id}/preview/keepalive")
+async def preview_keepalive(channel_id: str, session_id: str = Depends(require_auth)):
+    """Send keepalive to preview process"""
+    response = send_to_preview_socket(channel_id, "keepalive")
+    if response is None:
+        raise HTTPException(status_code=404, detail="Preview not running")
+    if response != "ok":
+        raise HTTPException(status_code=500, detail=f"Unexpected response: {response}")
+    return {"status": "ok"}
+
+@app.get("/api/channels/{channel_id}/preview/info")
+async def preview_info(channel_id: str, session_id: str = Depends(require_auth)):
+    """Get stream info from preview process"""
+    response = send_to_preview_socket(channel_id, "info")
+    if response is None:
+        raise HTTPException(status_code=404, detail="Preview not running")
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid response from preview")
+
+@app.get("/api/channels/{channel_id}/preview/{filename:path}")
+async def serve_preview_file(channel_id: str, filename: str, session_id: str = Depends(require_auth)):
+    """Serve HLS files from preview"""
+    if '..' in filename or filename.startswith('/'):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    preview_dir = os.path.join(PREVIEW_DIR, channel_id)
+    file_path = os.path.join(preview_dir, filename)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    media_type = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/mp2t'
+    return FileResponse(file_path, media_type=media_type)
+
+# =============================================================================
+# Settings
+# =============================================================================
+
+@app.get("/api/settings")
+async def get_settings(session_id: str = Depends(require_auth)):
+    """Get system settings"""
+    config = load_config()
+    system = config.get('system', {})
+    return {
+        'preview_bitrate': system.get('preview_bitrate', 2000),  # Default 2000 Kbps
+    }
+
+@app.put("/api/settings")
+async def update_settings(request: Request, session_id: str = Depends(require_auth)):
+    """Update system settings"""
+    data = await request.json()
+    config = load_config()
+
+    if 'system' not in config:
+        config['system'] = {}
+
+    if 'preview_bitrate' in data:
+        config['system']['preview_bitrate'] = int(data['preview_bitrate'])
+
+    save_config(config)
+    return {"success": True}
+
+# =============================================================================
 # Static Files & HTML Routes
 # =============================================================================
 
@@ -1145,6 +1293,14 @@ async def server_page(request: Request):
     if not verify_session(session_id):
         return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'server.html'))
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """Serve settings page"""
+    session_id = request.cookies.get('session_id')
+    if not verify_session(session_id):
+        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
+    return FileResponse(os.path.join(WEB_DIR, 'settings.html'))
 
 # =============================================================================
 # Main
