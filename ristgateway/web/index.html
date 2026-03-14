@@ -867,6 +867,27 @@
                 <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
             </div>
             <div class="modal-body">
+                <!-- Preview Transcoding Settings -->
+                <h3 style="font-size: 14px; margin-bottom: 16px; color: var(--text-secondary);">Preview Transcoding</h3>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Preview Bitrate</label>
+                    <select id="settings-preview-bitrate" style="width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px;">
+                        <option value="500">500 Kbps (Low)</option>
+                        <option value="1000">1000 Kbps</option>
+                        <option value="1500">1500 Kbps</option>
+                        <option value="2000">2000 Kbps (Default)</option>
+                        <option value="3000">3000 Kbps</option>
+                        <option value="4000">4000 Kbps</option>
+                        <option value="5000">5000 Kbps (High)</option>
+                    </select>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">Higher bitrate = better quality but more bandwidth</p>
+                </div>
+                <div id="settings-error" style="display: none; color: var(--accent-red); font-size: 12px; margin-bottom: 12px;"></div>
+                <div id="settings-success" style="display: none; color: var(--accent-green); font-size: 12px; margin-bottom: 12px;"></div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+                <!-- Change Password -->
                 <h3 style="font-size: 14px; margin-bottom: 16px; color: var(--text-secondary);">Change Password</h3>
                 <div class="form-group" style="margin-bottom: 12px;">
                     <label style="display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Current Password</label>
@@ -885,7 +906,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="changePassword()">Change Password</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
             </div>
         </div>
     </div>
@@ -1637,17 +1658,69 @@
         }
 
         // Settings modal
-        function openSettingsModal() {
+        async function openSettingsModal() {
             document.getElementById('current-password').value = '';
             document.getElementById('new-password').value = '';
             document.getElementById('confirm-password').value = '';
             document.getElementById('password-error').style.display = 'none';
             document.getElementById('password-success').style.display = 'none';
+            document.getElementById('settings-error').style.display = 'none';
+            document.getElementById('settings-success').style.display = 'none';
             document.getElementById('settings-modal').classList.add('visible');
+
+            // Load current settings
+            try {
+                const response = await fetch(`${API_BASE}/settings`, { credentials: 'include' });
+                if (response.ok) {
+                    const settings = await response.json();
+                    document.getElementById('settings-preview-bitrate').value = settings.preview_bitrate || 2000;
+                }
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
         }
 
         function closeSettingsModal() {
             document.getElementById('settings-modal').classList.remove('visible');
+        }
+
+        async function saveSettings() {
+            const errorEl = document.getElementById('settings-error');
+            const successEl = document.getElementById('settings-success');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+
+            const settings = {
+                preview_bitrate: parseInt(document.getElementById('settings-preview-bitrate').value)
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/settings`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (response.ok) {
+                    successEl.textContent = 'Settings saved successfully';
+                    successEl.style.display = 'block';
+                } else {
+                    const data = await response.json();
+                    errorEl.textContent = data.detail || 'Failed to save settings';
+                    errorEl.style.display = 'block';
+                }
+            } catch (e) {
+                errorEl.textContent = 'Failed to save settings';
+                errorEl.style.display = 'block';
+            }
+
+            // Also handle password change if fields are filled
+            const currentPassword = document.getElementById('current-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            if (currentPassword && newPassword) {
+                await changePassword();
+            }
         }
 
         async function changePassword() {

@@ -1433,6 +1433,33 @@ async def change_password(request: PasswordChange):
 
     return {"success": True, "message": "Password changed successfully"}
 
+@app.get("/api/settings", dependencies=[Depends(auth_required)])
+async def get_settings():
+    """Get server settings"""
+    config = load_config()
+    settings = config.get('settings', {})
+    return {
+        "preview_bitrate": settings.get('preview_bitrate', 2000)
+    }
+
+@app.put("/api/settings", dependencies=[Depends(auth_required)])
+async def update_settings(request: Request):
+    """Update server settings"""
+    data = await request.json()
+    config = load_config()
+    if 'settings' not in config:
+        config['settings'] = {}
+
+    # Update preview bitrate
+    if 'preview_bitrate' in data:
+        bitrate = int(data['preview_bitrate'])
+        if bitrate < 100 or bitrate > 20000:
+            raise HTTPException(status_code=400, detail="Bitrate must be between 100 and 20000")
+        config['settings']['preview_bitrate'] = bitrate
+
+    save_config(config)
+    return {"success": True}
+
 # =============================================================================
 # Gateway Endpoints
 # =============================================================================
@@ -2247,9 +2274,9 @@ def start_preview(gateway_id: str):
     # Create preview directory
     os.makedirs(preview_dir, exist_ok=True)
 
-    # Get preview bitrate from settings (default 2000 Kbps)
-    settings = gw.get('settings', {})
-    preview_bitrate = str(settings.get('preview_bitrate', 2000))
+    # Get preview bitrate - use global settings (default 2000 Kbps)
+    global_settings = config.get('settings', {})
+    preview_bitrate = str(global_settings.get('preview_bitrate', 2000))
 
     # Start ristpreview process
     try:
