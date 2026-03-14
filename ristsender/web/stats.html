@@ -942,11 +942,14 @@
                 });
 
                 previewHls.on(Hls.Events.ERROR, (event, data) => {
+                    console.log('HLS Error:', data.type, data.details, 'fatal:', data.fatal);
                     if (data.fatal) {
+                        console.log('Fatal error - will retry in 2s');
                         document.getElementById('preview-status').textContent = 'Stream error - retrying...';
                         document.getElementById('preview-loading').style.display = 'flex';
                         setTimeout(() => {
-                            if (previewHls) {
+                            if (channelId && previewHls) {
+                                console.log('Retrying loadSource...');
                                 previewHls.loadSource(hlsUrl);
                             }
                         }, 2000);
