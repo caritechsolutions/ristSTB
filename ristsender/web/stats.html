@@ -222,6 +222,141 @@
             font-weight: 600;
         }
 
+        /* Client/Peer hierarchy styles */
+        .clients-container {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .client-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+        }
+
+        .client-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            background: var(--bg-hover);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .client-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .client-quality {
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .client-quality.good {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--accent-green);
+        }
+
+        .client-quality.warning {
+            background: rgba(234, 179, 8, 0.2);
+            color: var(--accent-yellow);
+        }
+
+        .client-quality.bad {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+        }
+
+        .client-totals {
+            display: flex;
+            gap: 1.5rem;
+            padding: 0.75rem 1.25rem;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .peers-list {
+            padding: 0.75rem 1.25rem;
+        }
+
+        .peer-row {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .peer-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .peer-row:first-child {
+            padding-top: 0;
+        }
+
+        .peer-row-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .peer-row-id {
+            font-weight: 500;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .peer-row-quality {
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .peer-row-quality.good {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .peer-row-quality.warning {
+            background: rgba(234, 179, 8, 0.15);
+            color: var(--accent-yellow);
+        }
+
+        .peer-row-quality.bad {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .peer-row-stats {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .peer-row-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .peer-row-label {
+            color: var(--text-secondary);
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .peer-row-value {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
         .logs-container {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -337,10 +472,10 @@
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 6v6l4 2"/>
                 </svg>
-                Connected Gateways
+                Connected Clients
             </h2>
-            <div class="peers-grid" id="peers-container">
-                <p style="color: var(--text-secondary);">Loading gateways...</p>
+            <div class="clients-container" id="clients-container">
+                <p style="color: var(--text-secondary);">Loading clients...</p>
             </div>
         </div>
 
@@ -450,55 +585,68 @@
             if (bandwidthHistory.length > 60) bandwidthHistory.shift();
             updateBandwidthChart();
 
-            // Update peers
-            renderPeers(stats.peers || []);
+            // Update clients
+            renderClients(stats.clients || []);
         }
 
-        function renderPeers(peers) {
-            const container = document.getElementById('peers-container');
+        function renderClients(clients) {
+            const container = document.getElementById('clients-container');
 
-            if (peers.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-secondary);">No peer data available</p>';
+            if (clients.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">No connected clients</p>';
                 return;
             }
 
-            container.innerHTML = peers.map(peer => {
+            container.innerHTML = clients.map(client => {
                 let qualityClass = 'good';
-                if (peer.quality < 99) qualityClass = 'warning';
-                if (peer.quality < 95) qualityClass = 'bad';
+                if (client.totals.quality < 99) qualityClass = 'warning';
+                if (client.totals.quality < 95) qualityClass = 'bad';
 
-                // Use cname if available, fallback to id
-                const peerName = peer.cname || peer.id || 'Unknown';
-                const connectionInfo = peer.connection_count > 1
-                    ? `<span class="peer-id">${peer.connection_count} connections</span>`
-                    : '';
+                const peersHtml = client.peers.map(peer => {
+                    let peerQualityClass = 'good';
+                    if (peer.quality < 99) peerQualityClass = 'warning';
+                    if (peer.quality < 95) peerQualityClass = 'bad';
+
+                    return `
+                        <div class="peer-row">
+                            <div class="peer-row-header">
+                                <span class="peer-row-id">Peer ${peer.id}</span>
+                                <span class="peer-row-quality ${peerQualityClass}">${peer.quality.toFixed(1)}%</span>
+                            </div>
+                            <div class="peer-row-stats">
+                                <div class="peer-row-stat">
+                                    <span class="peer-row-label">BW</span>
+                                    <span class="peer-row-value">${formatBandwidth(peer.bandwidth_bps)}</span>
+                                </div>
+                                <div class="peer-row-stat">
+                                    <span class="peer-row-label">Sent</span>
+                                    <span class="peer-row-value">${formatNumber(peer.sent || 0)}</span>
+                                </div>
+                                <div class="peer-row-stat">
+                                    <span class="peer-row-label">Retx</span>
+                                    <span class="peer-row-value">${formatNumber(peer.retransmitted || 0)}</span>
+                                </div>
+                                <div class="peer-row-stat">
+                                    <span class="peer-row-label">RTT</span>
+                                    <span class="peer-row-value">${(peer.avg_rtt || peer.rtt || 0).toFixed(1)} ms</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
 
                 return `
-                    <div class="peer-card">
-                        <div class="peer-header">
-                            <div class="peer-name">
-                                ${peerName}
-                                ${connectionInfo}
-                            </div>
-                            <span class="peer-quality ${qualityClass}">${peer.quality.toFixed(1)}%</span>
+                    <div class="client-card">
+                        <div class="client-header">
+                            <div class="client-name">${client.cname}</div>
+                            <span class="client-quality ${qualityClass}">${client.totals.quality.toFixed(1)}%</span>
                         </div>
-                        <div class="peer-stats">
-                            <div class="peer-stat-item">
-                                <div class="peer-stat-label">Bandwidth</div>
-                                <div class="peer-stat-value">${formatBandwidth(peer.bandwidth_bps)}</div>
-                            </div>
-                            <div class="peer-stat-item">
-                                <div class="peer-stat-label">Sent</div>
-                                <div class="peer-stat-value">${formatNumber(peer.packets?.sent || 0)}</div>
-                            </div>
-                            <div class="peer-stat-item">
-                                <div class="peer-stat-label">Retransmitted</div>
-                                <div class="peer-stat-value">${formatNumber(peer.packets?.retransmitted || 0)}</div>
-                            </div>
-                            <div class="peer-stat-item">
-                                <div class="peer-stat-label">RTT</div>
-                                <div class="peer-stat-value">${(peer.rtt || 0).toFixed(1)} ms</div>
-                            </div>
+                        <div class="client-totals">
+                            <span>Total: ${formatBandwidth(client.totals.bandwidth_bps)}</span>
+                            <span>RTT: ${client.totals.rtt.toFixed(1)} ms</span>
+                        </div>
+                        <div class="peers-list">
+                            ${peersHtml}
                         </div>
                     </div>
                 `;
