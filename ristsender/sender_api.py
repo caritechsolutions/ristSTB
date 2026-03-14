@@ -1368,6 +1368,16 @@ async def update_settings(request: Request, session_id: str = Depends(require_au
 # Static Files & HTML Routes
 # =============================================================================
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon"""
+    # Simple RIST "S" icon as SVG for sender
+    svg_icon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="6" fill="#22c55e"/>
+        <text x="16" y="24" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle">S</text>
+    </svg>'''
+    return Response(content=svg_icon, media_type="image/svg+xml")
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Serve index page"""
