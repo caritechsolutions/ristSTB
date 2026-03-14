@@ -1021,7 +1021,7 @@
             if (e.key === 'Escape') closePreview();
         });
 
-        // Stop preview when leaving page
+        // Clean up preview when leaving page
         window.addEventListener('beforeunload', closePreview);
 
         document.addEventListener('DOMContentLoaded', async () => {
