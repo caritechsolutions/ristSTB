@@ -2362,10 +2362,10 @@ def serve_preview_file(gateway_id: str, filename: str):
 @app.get("/favicon.ico")
 async def favicon():
     """Serve favicon"""
-    # Simple RIST "R" icon as SVG converted to ICO-compatible PNG
+    # Blue "G" icon for Gateway
     svg_icon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
         <rect width="32" height="32" rx="6" fill="#3b82f6"/>
-        <text x="16" y="24" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle">R</text>
+        <text x="16" y="24" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle">G</text>
     </svg>'''
     return Response(content=svg_icon, media_type="image/svg+xml")
 
