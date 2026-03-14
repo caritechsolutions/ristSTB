@@ -955,6 +955,7 @@
                         if (data.fatal) {
                             console.error('HLS fatal error:', data);
                             statusEl.textContent = 'Stream error - retrying...';
+                            placeholder.style.display = 'flex';
                             setTimeout(() => {
                                 if (previewActive && hlsPlayer) {
                                     hlsPlayer.loadSource(hlsUrl);
