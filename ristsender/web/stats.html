@@ -940,29 +940,36 @@
                 const hlsUrl = `${API_BASE}/channels/${channelId}/preview/stream.m3u8`;
 
                 if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                    hlsPlayer = new Hls({
-                        enableWorker: true,
-                        lowLatencyMode: true
-                    });
-                    hlsPlayer.loadSource(hlsUrl);
-                    hlsPlayer.attachMedia(video);
-                    hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                        placeholder.style.display = 'none';
-                        video.play();
-                        fetchStreamInfo();
-                    });
-                    hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-                        if (data.fatal) {
-                            console.error('HLS fatal error:', data);
-                            statusEl.textContent = 'Stream error - retrying...';
-                            placeholder.style.display = 'flex';
-                            setTimeout(() => {
-                                if (previewActive && hlsPlayer) {
-                                    hlsPlayer.loadSource(hlsUrl);
-                                }
-                            }, 2000);
+                    function createHlsPlayer() {
+                        if (hlsPlayer) {
+                            hlsPlayer.destroy();
                         }
-                    });
+                        hlsPlayer = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                            backBufferLength: 30
+                        });
+                        hlsPlayer.loadSource(hlsUrl);
+                        hlsPlayer.attachMedia(video);
+                        hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                            placeholder.style.display = 'none';
+                            video.play();
+                            fetchStreamInfo();
+                        });
+                        hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+                            if (data.fatal) {
+                                console.error('HLS fatal error:', data);
+                                statusEl.textContent = 'Stream error - retrying...';
+                                placeholder.style.display = 'flex';
+                                setTimeout(() => {
+                                    if (previewActive) {
+                                        createHlsPlayer();
+                                    }
+                                }, 2000);
+                            }
+                        });
+                    }
+                    createHlsPlayer();
                 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                     video.src = hlsUrl;
                     video.addEventListener('loadedmetadata', () => {
