@@ -241,6 +241,18 @@ cp "$INSTALL_DIR/ristSTB/ristgateway/gateway_config.yaml" /etc/ristgateway/ 2>/d
 mkdir -p /dev/shm/ristgateway-stats
 mkdir -p /dev/shm/ristgateway-preview
 
+# Configure journald to limit disk usage (prevents journal from filling disk)
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/ristgateway.conf << 'EOF'
+# Limit journal size to prevent disk fill-up
+# Max 500MB total, max 100MB per file, keep 1 week
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=100M
+MaxRetentionSec=1week
+EOF
+systemctl restart systemd-journald 2>/dev/null || true
+
 # Create systemd service for stats collector
 cat > /etc/systemd/system/ristgateway-stats.service << 'EOF'
 [Unit]

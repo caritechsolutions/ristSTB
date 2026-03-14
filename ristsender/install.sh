@@ -174,6 +174,18 @@ cp "$INSTALL_DIR/ristSTB/ristsender/sender_config.yaml" /etc/ristsender/ 2>/dev/
 mkdir -p /dev/shm/ristsender-stats
 mkdir -p /dev/shm/ristsender-preview
 
+# Configure journald to limit disk usage (prevents journal from filling disk)
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/ristsender.conf << 'EOF'
+# Limit journal size to prevent disk fill-up
+# Max 500MB total, max 100MB per file, keep 1 week
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=100M
+MaxRetentionSec=1week
+EOF
+systemctl restart systemd-journald 2>/dev/null || true
+
 # Create systemd service for stats collector
 cat > /etc/systemd/system/ristsender-stats.service << 'EOF'
 [Unit]
