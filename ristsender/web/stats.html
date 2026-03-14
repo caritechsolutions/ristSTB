@@ -930,12 +930,19 @@
                 previewHls = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
-                    backBufferLength: 30
+                    backBufferLength: 30,
+                    manifestLoadingMaxRetry: 2,
+                    manifestLoadingRetryDelay: 1000,
+                    levelLoadingMaxRetry: 2,
+                    levelLoadingRetryDelay: 1000
                 });
+
+                console.log('HLS: Loading source', hlsUrl);
                 previewHls.loadSource(hlsUrl);
                 previewHls.attachMedia(video);
 
                 previewHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('HLS: Manifest parsed successfully');
                     document.getElementById('preview-loading').style.display = 'none';
                     video.play();
                     fetchPreviewInfo(chId);
@@ -944,13 +951,15 @@
                 previewHls.on(Hls.Events.ERROR, (event, data) => {
                     console.log('HLS Error:', data.type, data.details, 'fatal:', data.fatal);
                     if (data.fatal) {
-                        console.log('Fatal error - will retry in 2s');
+                        console.log('Fatal error - destroying and retrying in 2s');
                         document.getElementById('preview-status').textContent = 'Stream error - retrying...';
                         document.getElementById('preview-loading').style.display = 'flex';
+                        previewHls.destroy();
+                        previewHls = null;
                         setTimeout(() => {
-                            if (channelId && previewHls) {
-                                console.log('Retrying loadSource...');
-                                previewHls.loadSource(hlsUrl);
+                            if (channelId) {
+                                console.log('Retrying startHlsPlayback...');
+                                startHlsPlayback(chId);
                             }
                         }, 2000);
                     }
