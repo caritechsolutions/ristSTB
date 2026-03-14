@@ -126,6 +126,27 @@ for service_file in /etc/systemd/system/ristsender-channel*.service; do
     fi
 done
 
+# Build ristpreview if not present or source changed
+echo ""
+echo "Checking ristpreview..."
+if [ -f "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" ]; then
+    # Rebuild if source is newer or binary doesn't exist
+    if [ ! -f /usr/local/bin/ristpreview ] || \
+       [ "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" -nt /usr/local/bin/ristpreview ]; then
+        echo "Building ristpreview..."
+        gcc -O2 -Wall -o /usr/local/bin/ristpreview \
+            "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" \
+            -lpthread
+        chmod +x /usr/local/bin/ristpreview
+        echo "[OK] ristpreview updated"
+    else
+        echo "[OK] ristpreview already up to date"
+    fi
+fi
+
+# Create preview shared memory directory
+mkdir -p /dev/shm/ristsender-preview
+
 # Update Web API
 echo ""
 echo "Updating Sender Web API..."

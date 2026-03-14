@@ -1148,12 +1148,12 @@ async def start_preview(channel_id: str, session_id: str = Depends(require_auth)
     # Create preview directory
     os.makedirs(preview_dir, exist_ok=True)
 
-    # Start ristpreview process with UDP input
+    # Start ristpreview process (works with UDP URLs too via ffmpeg)
     try:
         proc = subprocess.Popen(
             [
                 '/usr/local/bin/ristpreview',
-                '--udp-url', input_url,
+                '--rist-url', input_url,
                 '--output', preview_dir
             ],
             stdout=subprocess.DEVNULL,

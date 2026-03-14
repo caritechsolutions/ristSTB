@@ -129,6 +129,19 @@ else
     git checkout $BRANCH
 fi
 
+# Build ristpreview (for HLS preview)
+echo ""
+echo "Building ristpreview..."
+if [ -f "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" ]; then
+    gcc -O2 -Wall -o /usr/local/bin/ristpreview \
+        "$INSTALL_DIR/ristSTB/ristgateway/ristpreview.c" \
+        -lpthread
+    chmod +x /usr/local/bin/ristpreview
+    echo "[OK] ristpreview installed"
+else
+    echo "[WARN] ristpreview.c not found - preview feature may not work"
+fi
+
 # Install Web API
 echo ""
 echo "Installing Sender Web API..."
@@ -159,6 +172,7 @@ cp "$INSTALL_DIR/ristSTB/ristsender/sender_config.yaml" /etc/ristsender/ 2>/dev/
 
 # Create shared memory directories (RAM-backed, no disk I/O)
 mkdir -p /dev/shm/ristsender-stats
+mkdir -p /dev/shm/ristsender-preview
 
 # Create systemd service for stats collector
 cat > /etc/systemd/system/ristsender-stats.service << 'EOF'
