@@ -656,6 +656,34 @@
                 </div>
             </div>
 
+            <!-- Transcoding Settings -->
+            <div class="form-section">
+                <div class="section-header">
+                    <h2 class="section-title">
+                        <span class="icon">&#9654;</span>
+                        Preview Transcoding
+                    </h2>
+                </div>
+                <p class="section-description">
+                    Settings for the live preview player. The preview transcodes the RIST stream to LL-HLS for browser playback.
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="preview-bitrate">Preview Bitrate (Kbps)</label>
+                        <select id="preview-bitrate" class="form-select">
+                            <option value="500">500 Kbps (Low)</option>
+                            <option value="1000">1000 Kbps</option>
+                            <option value="1500">1500 Kbps</option>
+                            <option value="2000" selected>2000 Kbps (Default)</option>
+                            <option value="3000">3000 Kbps</option>
+                            <option value="4000">4000 Kbps</option>
+                            <option value="5000">5000 Kbps (High)</option>
+                        </select>
+                        <p class="form-hint">Higher bitrate = better quality but more bandwidth</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Actions -->
             <div class="actions-bar">
                 <div class="actions-left">
@@ -819,6 +847,7 @@
             document.getElementById('npd').checked = settings.npd !== false;
             document.getElementById('ssrc-passthrough').checked = settings.ssrc_passthrough !== false;
             document.getElementById('stats-interval').value = settings.stats_interval || 1000;
+            document.getElementById('preview-bitrate').value = settings.preview_bitrate || 2000;
 
             toggleSecretField();
 
@@ -975,7 +1004,8 @@
                     secret: encryption ? document.getElementById('secret').value : null,
                     npd: document.getElementById('npd').checked,
                     ssrc_passthrough: document.getElementById('ssrc-passthrough').checked,
-                    stats_interval: parseInt(document.getElementById('stats-interval').value)
+                    stats_interval: parseInt(document.getElementById('stats-interval').value),
+                    preview_bitrate: parseInt(document.getElementById('preview-bitrate').value)
                 }
             };
 

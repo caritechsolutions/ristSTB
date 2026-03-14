@@ -2247,13 +2247,18 @@ def start_preview(gateway_id: str):
     # Create preview directory
     os.makedirs(preview_dir, exist_ok=True)
 
+    # Get preview bitrate from settings (default 2000 Kbps)
+    settings = gw.get('settings', {})
+    preview_bitrate = str(settings.get('preview_bitrate', 2000))
+
     # Start ristpreview process
     try:
         proc = subprocess.Popen(
             [
                 '/usr/local/bin/ristpreview',
                 '--rist-url', output_url,
-                '--output', preview_dir
+                '--output', preview_dir,
+                '--bitrate', preview_bitrate
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
