@@ -434,7 +434,8 @@
             visibility: hidden;
             transition: all 0.3s;
         }
-        .modal-overlay.active {
+        .modal-overlay.active,
+        .modal-overlay.visible {
             opacity: 1;
             visibility: visible;
         }
@@ -447,7 +448,8 @@
             transform: scale(0.9);
             transition: transform 0.3s;
         }
-        .modal-overlay.active .modal {
+        .modal-overlay.active .modal,
+        .modal-overlay.visible .modal {
             transform: scale(1);
         }
         .preview-modal-content {
@@ -580,27 +582,27 @@
         </div>
     </main>
 
-    <!-- Preview Modal -->
-    <div class="modal-overlay" id="preview-modal">
-        <div class="modal preview-modal-content">
+    <!-- Preview Modal - exact copy from index.html -->
+    <div class="modal-overlay preview-modal" id="preview-modal">
+        <div class="modal" style="max-width: 800px;">
             <div class="modal-header">
-                <span class="modal-title">Stream Preview</span>
+                <span class="modal-title">Preview: <span id="preview-channel-name"></span></span>
                 <button class="modal-close" onclick="closePreview()">&times;</button>
             </div>
-            <div class="modal-body">
-                <div class="player-container">
-                    <video id="preview-video" style="width:100%; height:100%; background:#000;" controls autoplay muted></video>
-                    <div class="player-placeholder" id="player-placeholder">
+            <div class="modal-body" style="padding: 16px;">
+                <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden;">
+                    <video id="preview-video" style="width: 100%; height: 100%;" controls autoplay muted></video>
+                    <div id="preview-loading" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-secondary); gap: 12px;">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
                             <polygon points="5 3 19 12 5 21 5 3"/>
                         </svg>
-                        <div id="player-status">Starting preview...</div>
+                        <div id="preview-status">Starting preview...</div>
                     </div>
                 </div>
-                <div class="preview-info" id="preview-info" style="display:none;">
-                    <span id="preview-resolution">-</span>
-                    <span id="preview-bitrate">-</span>
+                <div id="preview-info" style="display: none; margin-top: 12px; padding: 10px; background: var(--bg-secondary); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
+                    <span id="preview-resolution">-</span> &bull; <span id="preview-bitrate">-</span>
                 </div>
+                <div id="preview-error" style="display: none; margin-top: 12px; padding: 10px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; color: var(--accent-red); font-size: 13px;"></div>
             </div>
         </div>
     </div>
@@ -882,46 +884,21 @@
             return div.innerHTML;
         }
 
-        // Preview functions
-        let hlsPlayer = null;
+        // Preview functions - exact copy from index.html
+        let previewHls = null;
         let previewKeepaliveInterval = null;
-        let previewActive = false;
 
         function openPreview() {
-            document.getElementById('preview-modal').classList.add('active');
+            document.getElementById('preview-channel-name').textContent = channel?.name || channelId;
+            document.getElementById('preview-modal').classList.add('visible');
+            document.getElementById('preview-loading').style.display = 'flex';
+            document.getElementById('preview-error').style.display = 'none';
+            document.getElementById('preview-info').style.display = 'none';
+            document.getElementById('preview-status').textContent = 'Starting preview...';
             startPreview();
         }
 
-        function closePreview() {
-            document.getElementById('preview-modal').classList.remove('active');
-            stopPreview();
-        }
-
-        function stopPreview() {
-            previewActive = false;
-            if (previewKeepaliveInterval) {
-                clearInterval(previewKeepaliveInterval);
-                previewKeepaliveInterval = null;
-            }
-            if (hlsPlayer) {
-                hlsPlayer.destroy();
-                hlsPlayer = null;
-            }
-            const video = document.getElementById('preview-video');
-            video.pause();
-            video.src = '';
-            document.getElementById('player-placeholder').style.display = 'flex';
-            document.getElementById('player-status').textContent = 'Starting preview...';
-        }
-
         async function startPreview() {
-            if (previewActive) return;
-
-            const placeholder = document.getElementById('player-placeholder');
-            const statusEl = document.getElementById('player-status');
-            statusEl.textContent = 'Starting preview...';
-            placeholder.style.display = 'flex';
-
             try {
                 const response = await fetch(`${API_BASE}/channels/${channelId}/preview/start`, {
                     method: 'POST',
@@ -932,71 +909,82 @@
                     throw new Error(data.detail || 'Failed to start preview');
                 }
 
-                previewActive = true;
-                statusEl.textContent = 'Loading stream...';
+                document.getElementById('preview-status').textContent = 'Loading stream...';
 
-                // Start HLS playback
-                const video = document.getElementById('preview-video');
-                const hlsUrl = `${API_BASE}/channels/${channelId}/preview/stream.m3u8`;
+                previewKeepaliveInterval = setInterval(() => sendPreviewKeepalive(channelId), 10000);
 
-                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                    function createHlsPlayer() {
-                        if (hlsPlayer) {
-                            hlsPlayer.destroy();
-                        }
-                        hlsPlayer = new Hls({
-                            enableWorker: true,
-                            lowLatencyMode: true,
-                            backBufferLength: 30
-                        });
-                        hlsPlayer.loadSource(hlsUrl);
-                        hlsPlayer.attachMedia(video);
-                        hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                            placeholder.style.display = 'none';
-                            video.play();
-                            fetchStreamInfo();
-                        });
-                        hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-                            if (data.fatal) {
-                                console.error('HLS fatal error:', data);
-                                statusEl.textContent = 'Stream error - retrying...';
-                                placeholder.style.display = 'flex';
-                                setTimeout(() => {
-                                    if (previewActive) {
-                                        createHlsPlayer();
-                                    }
-                                }, 2000);
-                            }
-                        });
-                    }
-                    createHlsPlayer();
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = hlsUrl;
-                    video.addEventListener('loadedmetadata', () => {
-                        placeholder.style.display = 'none';
-                        video.play();
-                        fetchStreamInfo();
-                    });
-                } else {
-                    statusEl.textContent = 'HLS not supported in this browser';
-                    previewActive = false;
-                    return;
-                }
-
-                // Start keepalive
-                previewKeepaliveInterval = setInterval(sendKeepalive, 10000);
-
+                startHlsPlayback(channelId);
             } catch (error) {
                 console.error('Preview error:', error);
-                statusEl.textContent = error.message;
-                previewActive = false;
+                document.getElementById('preview-loading').style.display = 'none';
+                document.getElementById('preview-error').style.display = 'block';
+                document.getElementById('preview-error').textContent = error.message;
             }
         }
 
-        async function sendKeepalive() {
-            if (!previewActive) return;
+        function startHlsPlayback(chId) {
+            const video = document.getElementById('preview-video');
+            const hlsUrl = `${API_BASE}/channels/${chId}/preview/stream.m3u8`;
+
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                previewHls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30
+                });
+                previewHls.loadSource(hlsUrl);
+                previewHls.attachMedia(video);
+
+                previewHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    document.getElementById('preview-loading').style.display = 'none';
+                    video.play();
+                    fetchPreviewInfo(chId);
+                });
+
+                previewHls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        document.getElementById('preview-status').textContent = 'Stream error - retrying...';
+                        document.getElementById('preview-loading').style.display = 'flex';
+                        setTimeout(() => {
+                            if (previewHls) {
+                                previewHls.loadSource(hlsUrl);
+                            }
+                        }, 2000);
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = hlsUrl;
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('preview-loading').style.display = 'none';
+                    video.play();
+                    fetchPreviewInfo(chId);
+                });
+            } else {
+                document.getElementById('preview-loading').style.display = 'none';
+                document.getElementById('preview-error').style.display = 'block';
+                document.getElementById('preview-error').textContent = 'HLS not supported in this browser';
+            }
+        }
+
+        async function fetchPreviewInfo(chId) {
             try {
-                await fetch(`${API_BASE}/channels/${channelId}/preview/keepalive`, {
+                const response = await fetch(`${API_BASE}/channels/${chId}/preview/info`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const info = await response.json();
+                    document.getElementById('preview-info').style.display = 'block';
+                    document.getElementById('preview-resolution').textContent = `${info.width}x${info.height}`;
+                    document.getElementById('preview-bitrate').textContent = `${(info.bitrate / 1000000).toFixed(2)} Mbps`;
+                }
+            } catch (error) {
+                console.error('Failed to fetch preview info:', error);
+            }
+        }
+
+        async function sendPreviewKeepalive(chId) {
+            try {
+                await fetch(`${API_BASE}/channels/${chId}/preview/keepalive`, {
                     method: 'POST',
                     credentials: 'include'
                 });
@@ -1005,21 +993,22 @@
             }
         }
 
-        async function fetchStreamInfo() {
-            if (!previewActive) return;
-            try {
-                const response = await fetch(`${API_BASE}/channels/${channelId}/preview/info`, {
-                    credentials: 'include'
-                });
-                if (response.ok) {
-                    const info = await response.json();
-                    document.getElementById('preview-info').style.display = 'flex';
-                    document.getElementById('preview-resolution').textContent = `${info.width}x${info.height}`;
-                    document.getElementById('preview-bitrate').textContent = `${(info.bitrate / 1000000).toFixed(2)} Mbps`;
-                }
-            } catch (error) {
-                console.error('Failed to fetch stream info:', error);
+        function closePreview() {
+            document.getElementById('preview-modal').classList.remove('visible');
+
+            if (previewKeepaliveInterval) {
+                clearInterval(previewKeepaliveInterval);
+                previewKeepaliveInterval = null;
             }
+
+            if (previewHls) {
+                previewHls.destroy();
+                previewHls = null;
+            }
+
+            const video = document.getElementById('preview-video');
+            video.pause();
+            video.src = '';
         }
 
         // Close modal on overlay click
