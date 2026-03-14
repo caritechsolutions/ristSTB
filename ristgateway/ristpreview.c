@@ -145,6 +145,8 @@ static int create_socket(const char *dir) {
     return sock;
 }
 
+static int video_bitrate_kbps = 2000;
+
 static int start_ffmpeg(const char *rist_url, const char *output_path) {
     int pipefd[2];
     if (pipe(pipefd) < 0) {
@@ -168,8 +170,15 @@ static int start_ffmpeg(const char *rist_url, const char *output_path) {
 
         char hls_path[MAX_PATH_LEN + 32];
         char seg_pattern[MAX_PATH_LEN + 32];
+        char bitrate_str[32];
+        char maxrate_str[32];
+        char bufsize_str[32];
+
         snprintf(hls_path, sizeof(hls_path), "%s/stream.m3u8", output_path);
         snprintf(seg_pattern, sizeof(seg_pattern), "%s/segment%%d.ts", output_path);
+        snprintf(bitrate_str, sizeof(bitrate_str), "%dk", video_bitrate_kbps);
+        snprintf(maxrate_str, sizeof(maxrate_str), "%dk", video_bitrate_kbps + video_bitrate_kbps / 6);
+        snprintf(bufsize_str, sizeof(bufsize_str), "%dk", video_bitrate_kbps * 2);
 
         execlp("ffmpeg", "ffmpeg",
             "-hide_banner",
@@ -178,9 +187,9 @@ static int start_ffmpeg(const char *rist_url, const char *output_path) {
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-tune", "zerolatency",
-            "-b:v", "300k",
-            "-maxrate", "350k",
-            "-bufsize", "600k",
+            "-b:v", bitrate_str,
+            "-maxrate", maxrate_str,
+            "-bufsize", bufsize_str,
             "-g", "30",
             "-c:a", "aac",
             "-b:a", "128k",
@@ -402,26 +411,29 @@ static void handle_client(int client_fd) {
 }
 
 static void print_usage(const char *prog) {
-    fprintf(stderr, "Usage: %s --rist-url <url> --output <dir>\n", prog);
-    fprintf(stderr, "  --rist-url   RIST input URL (e.g., rist://host:5000)\n");
+    fprintf(stderr, "Usage: %s --rist-url <url> --output <dir> [--bitrate <kbps>]\n", prog);
+    fprintf(stderr, "  --rist-url   RIST/UDP input URL (e.g., rist://host:5000 or udp://0.0.0.0:5000)\n");
     fprintf(stderr, "  --output     Output directory for HLS files\n");
+    fprintf(stderr, "  --bitrate    Video bitrate in Kbps (default: 2000)\n");
     fprintf(stderr, "  --timeout    Keepalive timeout in seconds (default: 60)\n");
 }
 
 int main(int argc, char *argv[]) {
     char rist_url[MAX_URL_LEN] = {0};
     int timeout = KEEPALIVE_TIMEOUT;
+    int bitrate = 2000;  /* Default 2000 Kbps */
 
     static struct option long_options[] = {
         {"rist-url", required_argument, 0, 'r'},
         {"output",   required_argument, 0, 'o'},
         {"timeout",  required_argument, 0, 't'},
+        {"bitrate",  required_argument, 0, 'b'},
         {"help",     no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "r:o:t:h", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "r:o:t:b:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'r':
                 strncpy(rist_url, optarg, sizeof(rist_url) - 1);
@@ -433,6 +445,11 @@ int main(int argc, char *argv[]) {
                 break;
             case 't':
                 timeout = atoi(optarg);
+                break;
+            case 'b':
+                bitrate = atoi(optarg);
+                if (bitrate < 100) bitrate = 100;
+                if (bitrate > 20000) bitrate = 20000;
                 break;
             case 'h':
             default:
@@ -467,14 +484,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* Start ffmpeg */
+    /* Start ffmpeg with configured bitrate */
+    video_bitrate_kbps = bitrate;
     if (start_ffmpeg(rist_url, output_dir) < 0) {
         fprintf(stderr, "Failed to start ffmpeg\n");
         close(sock);
         return 1;
     }
 
-    printf("ristpreview started: %s -> %s\n", rist_url, output_dir);
+    printf("ristpreview started: %s -> %s (bitrate: %dk)\n", rist_url, output_dir, bitrate);
     printf("Socket: %s/%s\n", output_dir, SOCKET_NAME);
 
     /* Initialize keepalive timer */

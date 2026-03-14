@@ -1148,13 +1148,17 @@ async def start_preview(channel_id: str, session_id: str = Depends(require_auth)
     # Create preview directory
     os.makedirs(preview_dir, exist_ok=True)
 
+    # Get bitrate setting
+    bitrate = config.get('system', {}).get('preview_bitrate', 2000)
+
     # Start ristpreview process (works with UDP URLs too via ffmpeg)
     try:
         proc = subprocess.Popen(
             [
                 '/usr/local/bin/ristpreview',
                 '--rist-url', input_url,
-                '--output', preview_dir
+                '--output', preview_dir,
+                '--bitrate', str(bitrate)
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
