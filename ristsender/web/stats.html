@@ -1022,7 +1022,7 @@
         });
 
         // Stop preview when leaving page
-        window.addEventListener('beforeunload', stopPreview);
+        window.addEventListener('beforeunload', closePreview);
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
