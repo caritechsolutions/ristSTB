@@ -666,6 +666,21 @@
             }
         }
 
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/channels/${channelId}/stats/history?minutes=60`, { credentials: 'include' });
+                const data = await response.json();
+                if (data.history && data.history.length > 0) {
+                    // Populate bandwidth history from stored data
+                    bandwidthHistory = data.history.map(p => p.bandwidth_bps / 1000000);
+                    updateBandwidthChart();
+                    console.log(`Loaded ${data.history.length} history points`);
+                }
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
         async function loadStats() {
             try {
                 const response = await fetch(`${API_BASE}/channels/${channelId}/stats`, { credentials: 'include' });
@@ -771,7 +786,7 @@
             bandwidthChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: Array(60).fill(''),
+                    labels: [],
                     datasets: [{
                         label: 'Bandwidth (Mbps)',
                         data: bandwidthHistory,
@@ -785,11 +800,20 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false,
                     plugins: {
                         legend: { display: false }
                     },
                     scales: {
-                        x: { display: false },
+                        x: {
+                            display: true,
+                            grid: { color: 'rgba(255,255,255,0.03)' },
+                            ticks: {
+                                color: '#a0a0b0',
+                                maxTicksLimit: 6,
+                                font: { size: 10 }
+                            }
+                        },
                         y: {
                             beginAtZero: true,
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -802,6 +826,14 @@
 
         function updateBandwidthChart() {
             if (bandwidthChart) {
+                // Generate time labels based on data length
+                const now = new Date();
+                const labels = bandwidthHistory.map((_, i) => {
+                    const secondsAgo = (bandwidthHistory.length - 1 - i) * 2;  // 2 sec intervals
+                    const time = new Date(now.getTime() - secondsAgo * 1000);
+                    return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                });
+                bandwidthChart.data.labels = labels;
                 bandwidthChart.data.datasets[0].data = bandwidthHistory;
                 bandwidthChart.update('none');
             }
@@ -1005,6 +1037,7 @@
 
             await loadChannel();
             initBandwidthChart();
+            await loadHistory();  // Load historic data first
             await loadStats();
 
             setInterval(async () => {

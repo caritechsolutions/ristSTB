@@ -165,6 +165,100 @@ def stop_interface_collector():
     """Stop the background interface stats collector"""
     global interface_collector_running
     interface_collector_running = False
+
+# Channel stats history (persisted to disk)
+CHANNEL_HISTORY_SIZE = 1800  # 1 hour at 2 seconds per sample
+CHANNEL_HISTORY_FILE = '/var/lib/ristsender/channel_history.json'
+channel_history: Dict[str, deque] = {}
+channel_history_lock = threading.Lock()
+channel_collector_thread = None
+channel_collector_running = False
+
+def init_channel_history():
+    """Load channel history from file if exists"""
+    global channel_history
+    os.makedirs(os.path.dirname(CHANNEL_HISTORY_FILE), exist_ok=True)
+    if os.path.exists(CHANNEL_HISTORY_FILE):
+        try:
+            with open(CHANNEL_HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+                for ch_id, points in data.items():
+                    channel_history[ch_id] = deque(points, maxlen=CHANNEL_HISTORY_SIZE)
+            logger.info(f"Loaded channel history for {len(channel_history)} channels")
+        except Exception as e:
+            logger.warning(f"Failed to load channel history: {e}")
+
+def save_channel_history():
+    """Save channel history to file"""
+    try:
+        with channel_history_lock:
+            data = {ch_id: list(points) for ch_id, points in channel_history.items()}
+        with open(CHANNEL_HISTORY_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.warning(f"Failed to save channel history: {e}")
+
+def collect_channel_stats():
+    """Background thread to collect channel statistics"""
+    global channel_collector_running
+    last_save = time.time()
+
+    while channel_collector_running:
+        try:
+            config = load_config()
+            channels = config.get('channels', {})
+            now = time.time()
+
+            with channel_history_lock:
+                for ch_id in channels:
+                    stats = get_channel_stats(ch_id)
+
+                    # Initialize history deque if needed
+                    if ch_id not in channel_history:
+                        channel_history[ch_id] = deque(maxlen=CHANNEL_HISTORY_SIZE)
+
+                    # Add data point with essential stats
+                    channel_history[ch_id].append({
+                        'timestamp': now,
+                        'bandwidth_bps': stats.get('bandwidth_bps', 0),
+                        'quality': stats.get('quality', 100),
+                        'rtt': stats.get('timing', {}).get('rtt', 0),
+                        'sent': stats.get('packets', {}).get('sent', 0),
+                        'retransmitted': stats.get('packets', {}).get('retransmitted', 0)
+                    })
+
+                # Clean up history for deleted channels
+                active_ids = set(channels.keys())
+                for ch_id in list(channel_history.keys()):
+                    if ch_id not in active_ids:
+                        del channel_history[ch_id]
+
+            # Save to file every 60 seconds
+            if now - last_save > 60:
+                save_channel_history()
+                last_save = now
+
+        except Exception as e:
+            logger.error(f"Channel stats collection error: {e}")
+
+        time.sleep(2)  # Collect every 2 seconds
+
+    # Save on shutdown
+    save_channel_history()
+    logger.info("Channel stats collector stopped")
+
+def start_channel_collector():
+    """Start the background channel stats collector"""
+    global channel_collector_thread, channel_collector_running
+    channel_collector_running = True
+    channel_collector_thread = threading.Thread(target=collect_channel_stats, daemon=True)
+    channel_collector_thread.start()
+    logger.info("Channel stats collector started")
+
+def stop_channel_collector():
+    """Stop the background channel stats collector"""
+    global channel_collector_running
+    channel_collector_running = False
     if interface_collector_thread:
         interface_collector_thread.join(timeout=2)
 
@@ -597,10 +691,13 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     logger.info("RIST Sender API starting...")
     init_interface_history()
+    init_channel_history()
     start_interface_collector()
+    start_channel_collector()
     yield
     logger.info("RIST Sender API shutting down...")
     stop_interface_collector()
+    stop_channel_collector()
 
 app = FastAPI(title="RIST Sender API", lifespan=lifespan)
 
@@ -794,6 +891,24 @@ async def channel_stats(channel_id: str, session_id: str = Depends(require_auth)
 
     stats = get_channel_stats(channel_id)
     return stats
+
+@app.get("/api/channels/{channel_id}/stats/history")
+async def channel_stats_history(channel_id: str, minutes: int = 60, session_id: str = Depends(require_auth)):
+    """Get channel stats history for graphing"""
+    config = load_config()
+    if channel_id not in config.get('channels', {}):
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    minutes = min(minutes, 60)  # Max 1 hour
+    cutoff = time.time() - (minutes * 60)
+
+    with channel_history_lock:
+        if channel_id in channel_history:
+            history = [p for p in channel_history[channel_id] if p['timestamp'] >= cutoff]
+        else:
+            history = []
+
+    return {"channel_id": channel_id, "history": history}
 
 @app.get("/api/channels/{channel_id}/logs")
 async def channel_logs(channel_id: str, lines: int = 100, session_id: str = Depends(require_auth)):
