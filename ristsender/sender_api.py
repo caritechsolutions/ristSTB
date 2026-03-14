@@ -359,7 +359,11 @@ def delete_service_file(channel_id: str):
 # =============================================================================
 
 def parse_sender_stats(stats_text: str) -> dict:
-    """Parse ristsender stats from journal output"""
+    """Parse ristsender stats from journal output (JSON format).
+
+    Groups peers by cname since each gateway connects to multiple redundant
+    sender listening peers (shows multiple IDs per cname).
+    """
     stats = {
         'quality': 100.0,
         'bandwidth_bps': 0,
@@ -372,6 +376,7 @@ def parse_sender_stats(stats_text: str) -> dict:
         },
         'timing': {
             'rtt': 0,
+            'avg_rtt': 0,
             'min_iat': 0,
             'cur_iat': 0,
             'max_iat': 0
@@ -382,44 +387,114 @@ def parse_sender_stats(stats_text: str) -> dict:
     if not stats_text:
         return stats
 
-    # Parse sender-stats lines
+    # Collect all peer entries, keyed by cname
+    # We'll keep only the most recent entry per (cname, id) pair
+    peer_entries = {}  # key: (cname, id) -> peer_data
+
     for line in stats_text.strip().split('\n'):
-        if 'sender-stats' in line.lower():
-            try:
-                # Format: peer_id=X quality=X sent=X received=X retransmitted=X bandwidth=X retry_bw=X rtt=X
-                parts = {}
-                for part in line.split():
-                    if '=' in part:
-                        key, val = part.split('=', 1)
-                        parts[key.lower()] = val
+        if 'sender-stats' not in line:
+            continue
 
-                peer = {
-                    'id': parts.get('peer_id', parts.get('flow_id', 'unknown')),
-                    'quality': float(parts.get('quality', 100)),
-                    'bandwidth_bps': int(float(parts.get('bandwidth', parts.get('bandwidth_bps', 0)))),
-                    'retry_bandwidth_bps': int(float(parts.get('retry_bw', parts.get('retry_bandwidth_bps', 0)))),
-                    'packets': {
-                        'sent': int(parts.get('sent', 0)),
-                        'received': int(parts.get('received', 0)),
-                        'retransmitted': int(parts.get('retransmitted', 0))
-                    },
-                    'rtt': float(parts.get('rtt', 0))
-                }
-                stats['peers'].append(peer)
+        try:
+            # Extract JSON from the line - format: timestamp|level|[INFO] {"sender-stats":...}
+            json_start = line.find('{')
+            if json_start == -1:
+                continue
 
-                # Update totals
-                stats['bandwidth_bps'] += peer['bandwidth_bps']
-                stats['retry_bandwidth_bps'] += peer['retry_bandwidth_bps']
-                stats['packets']['sent'] += peer['packets']['sent']
-                stats['packets']['received'] += peer['packets']['received']
-                stats['packets']['retransmitted'] += peer['packets']['retransmitted']
-                if peer['quality'] < stats['quality']:
-                    stats['quality'] = peer['quality']
-                if peer['rtt'] > stats['timing']['rtt']:
-                    stats['timing']['rtt'] = peer['rtt']
+            json_str = line[json_start:]
+            data = json.loads(json_str)
 
-            except Exception as e:
-                logger.debug(f"Failed to parse stats line: {e}")
+            if 'sender-stats' not in data:
+                continue
+
+            peer_data = data['sender-stats'].get('peer', {})
+            if not peer_data:
+                continue
+
+            cname = peer_data.get('cname', 'unknown')
+            peer_id = peer_data.get('id', 0)
+            peer_stats = peer_data.get('stats', {})
+
+            # Store/update this peer entry
+            peer_entries[(cname, peer_id)] = {
+                'cname': cname,
+                'id': peer_id,
+                'flow_id': peer_data.get('flow_id', 0),
+                'type': peer_data.get('type', 'data'),
+                'quality': peer_stats.get('quality', 100),
+                'sent': peer_stats.get('sent', 0),
+                'received': peer_stats.get('received', 0),
+                'retransmitted': peer_stats.get('retransmitted', 0),
+                'bandwidth': peer_stats.get('bandwidth', 0),
+                'retry_bandwidth': peer_stats.get('retry_bandwidth', 0),
+                'rtt': peer_stats.get('rtt', 0),
+                'avg_rtt': peer_stats.get('avg_rtt', 0),
+            }
+
+        except json.JSONDecodeError:
+            continue
+        except Exception as e:
+            logger.debug(f"Failed to parse stats line: {e}")
+            continue
+
+    # Now group by cname and aggregate stats
+    cname_groups = {}
+    for (cname, peer_id), entry in peer_entries.items():
+        if cname not in cname_groups:
+            cname_groups[cname] = []
+        cname_groups[cname].append(entry)
+
+    # Build aggregated peer list (one entry per cname/gateway)
+    for cname, entries in cname_groups.items():
+        if not entries:
+            continue
+
+        # Aggregate: sum bandwidth/packets, min quality, avg RTT
+        total_bandwidth = sum(e['bandwidth'] for e in entries)
+        total_retry_bw = sum(e['retry_bandwidth'] for e in entries)
+        total_sent = sum(e['sent'] for e in entries)
+        total_received = sum(e['received'] for e in entries)
+        total_retransmitted = sum(e['retransmitted'] for e in entries)
+        min_quality = min(e['quality'] for e in entries)
+        avg_rtt = sum(e['avg_rtt'] for e in entries) / len(entries)
+
+        # Get IDs for display
+        ids = sorted(set(e['id'] for e in entries))
+
+        peer = {
+            'cname': cname,
+            'ids': ids,
+            'id': cname,  # Use cname as primary ID for display
+            'quality': min_quality,
+            'bandwidth_bps': total_bandwidth,
+            'retry_bandwidth_bps': total_retry_bw,
+            'packets': {
+                'sent': total_sent,
+                'received': total_received,
+                'retransmitted': total_retransmitted
+            },
+            'rtt': avg_rtt,
+            'connection_count': len(entries)
+        }
+        stats['peers'].append(peer)
+
+        # Update totals
+        stats['bandwidth_bps'] += total_bandwidth
+        stats['retry_bandwidth_bps'] += total_retry_bw
+        stats['packets']['sent'] += total_sent
+        stats['packets']['received'] += total_received
+        stats['packets']['retransmitted'] += total_retransmitted
+        if min_quality < stats['quality']:
+            stats['quality'] = min_quality
+        if avg_rtt > stats['timing']['rtt']:
+            stats['timing']['rtt'] = avg_rtt
+
+    # Sort peers by cname for consistent display
+    stats['peers'].sort(key=lambda p: p.get('cname', ''))
+
+    # Calculate average RTT across all peers
+    if stats['peers']:
+        stats['timing']['avg_rtt'] = sum(p['rtt'] for p in stats['peers']) / len(stats['peers'])
 
     return stats
 

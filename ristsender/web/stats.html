@@ -337,10 +337,10 @@
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 6v6l4 2"/>
                 </svg>
-                Output Peers
+                Connected Gateways
             </h2>
             <div class="peers-grid" id="peers-container">
-                <p style="color: var(--text-secondary);">Loading peers...</p>
+                <p style="color: var(--text-secondary);">Loading gateways...</p>
             </div>
         </div>
 
@@ -467,12 +467,18 @@
                 if (peer.quality < 99) qualityClass = 'warning';
                 if (peer.quality < 95) qualityClass = 'bad';
 
+                // Use cname if available, fallback to id
+                const peerName = peer.cname || peer.id || 'Unknown';
+                const connectionInfo = peer.connection_count > 1
+                    ? `<span class="peer-id">${peer.connection_count} connections</span>`
+                    : '';
+
                 return `
                     <div class="peer-card">
                         <div class="peer-header">
                             <div class="peer-name">
-                                Output Peer
-                                <span class="peer-id">${peer.id}</span>
+                                ${peerName}
+                                ${connectionInfo}
                             </div>
                             <span class="peer-quality ${qualityClass}">${peer.quality.toFixed(1)}%</span>
                         </div>
