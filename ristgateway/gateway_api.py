@@ -1377,6 +1377,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cache-control middleware - prevent browser caching of API responses
+@app.middleware("http")
+async def add_cache_control(request: Request, call_next):
+    """Prevent browser caching of API responses to avoid stale auth state"""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 # =============================================================================
 # Auth Endpoints
 # =============================================================================
