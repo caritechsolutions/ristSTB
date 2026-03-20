@@ -1389,11 +1389,8 @@ async def favicon():
     return Response(content=svg_icon, media_type="image/svg+xml")
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index():
     """Serve index page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'index.html'))
 
 @app.get("/login", response_class=HTMLResponse)
@@ -1402,43 +1399,28 @@ async def login_page():
     return FileResponse(os.path.join(WEB_DIR, 'login.html'))
 
 @app.get("/edit/{channel_id}", response_class=HTMLResponse)
-async def edit_page(channel_id: str, request: Request):
+async def edit_page(channel_id: str):
     """Serve edit page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'edit.html'))
 
 @app.get("/new", response_class=HTMLResponse)
-async def new_page(request: Request):
+async def new_page():
     """Serve new channel page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'edit.html'))
 
 @app.get("/stats/{channel_id}", response_class=HTMLResponse)
-async def stats_page(channel_id: str, request: Request):
+async def stats_page(channel_id: str):
     """Serve stats page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'stats.html'))
 
 @app.get("/server", response_class=HTMLResponse)
-async def server_page(request: Request):
+async def server_page():
     """Serve server stats page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'server.html'))
 
 @app.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request):
+async def settings_page():
     """Serve settings page"""
-    session_id = request.cookies.get('session_id')
-    if not verify_session(session_id):
-        return FileResponse(os.path.join(WEB_DIR, 'login.html'))
     return FileResponse(os.path.join(WEB_DIR, 'settings.html'))
 
 # =============================================================================
