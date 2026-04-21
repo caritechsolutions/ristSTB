@@ -1,0 +1,36 @@
+# RIST Sender Configuration
+# Manages ristsender instances - UDP input to RIST output
+
+channels:
+  channel1:
+    name: "Example Channel"
+    enabled: true
+    status: "stopped"
+    process_id: null
+    last_error: null
+    metrics_port: 6001
+
+    # UDP Input
+    input: "udp://224.100.100.5:59606"
+
+    # RIST Output peers - can have multiple for load balancing/redundancy
+    outputs:
+      - url: "rist://@192.168.2.212:60606"
+        name: "Primary Output"
+        enabled: true
+
+    # RIST settings
+    settings:
+      profile: 1  # 0=simple, 1=main, 2=advanced
+      buffer: 1000
+      virt_dst_port: 4601
+      encryption_type: null  # null, 128, 256
+      secret: null
+      bandwidth: null  # Kbps limit, null for unlimited
+      congestion_control: null  # 0=disabled, 1=normal, 2=aggressive
+
+# System settings
+system:
+  log_level: 6  # syslog levels
+  data_dir: "/var/lib/ristsender"
+  pid_dir: "/var/run/ristsender"

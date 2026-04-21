@@ -60,6 +60,16 @@ executable('rist2rist',
 	include_directories: inc,
 	install: should_install)
 
+executable('rist22rist',
+	['rist22rist.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
+	dependencies: [
+		tools_dependencies,
+		threads,
+		librist_dep,
+	],
+	include_directories: inc,
+	install: should_install)
+
 executable('udp2udp',
 	['udp2udp.c', 'yamlparse.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
 	dependencies: [
