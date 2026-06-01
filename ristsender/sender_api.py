@@ -367,6 +367,12 @@ def generate_service_file(channel_id: str, channel: dict):
             if channel['settings'].get('virt_dst_port'):
                 sep = '&' if '?' in url else '?'
                 url = f"{url}{sep}virt-dst-port={channel['settings']['virt_dst_port']}"
+            if channel['settings'].get('congestion_control') is not None:
+                sep = '&' if '?' in url else '?'
+                url = f"{url}{sep}congestion-control={channel['settings']['congestion_control']}"
+            if channel['settings'].get('bandwidth'):
+                sep = '&' if '?' in url else '?'
+                url = f"{url}{sep}bandwidth={channel['settings']['bandwidth']}"
             output_urls.append(url)
 
     if not output_urls:
@@ -389,14 +395,6 @@ def generate_service_file(channel_id: str, channel: dict):
     # Buffer
     if channel['settings'].get('buffer'):
         cmd_parts.append(f"-b {channel['settings']['buffer']}")
-
-    # Congestion control
-    if channel['settings'].get('congestion_control') is not None:
-        cmd_parts.append(f"-c {channel['settings']['congestion_control']}")
-
-    # Bandwidth limit
-    if channel['settings'].get('bandwidth'):
-        cmd_parts.append(f"--bandwidth {channel['settings']['bandwidth']}")
 
     # Encryption
     if channel['settings'].get('secret'):
