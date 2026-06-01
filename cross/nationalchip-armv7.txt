@@ -1,0 +1,27 @@
+# Meson cross file for the NationalChip ARMv7-A (Cortex-A7) STB target.
+#
+# Toolchain: arm-nationalchip-linux-uclibcgnueabihf- (gcc 4.9.4, 2018.11)
+# libc:      uClibc-ng (from the toolchain's own sysroot, nothing extra needed)
+# CPU:       ARMv7-A Cortex-A7, hard float, FPU vfpv3-d16, little-endian
+#
+# Usage (from librist/):
+#   meson setup build-arm --cross-file ../cross/nationalchip-armv7.txt ...
+
+[binaries]
+c       = '/opt/stb/toolchain/gcc-nationalchip-4.9.4-2018.11-i686_arm-linux-uclibcgnueabihf/bin/arm-nationalchip-linux-uclibcgnueabihf-gcc'
+cpp     = '/opt/stb/toolchain/gcc-nationalchip-4.9.4-2018.11-i686_arm-linux-uclibcgnueabihf/bin/arm-nationalchip-linux-uclibcgnueabihf-g++'
+ar      = '/opt/stb/toolchain/gcc-nationalchip-4.9.4-2018.11-i686_arm-linux-uclibcgnueabihf/bin/arm-nationalchip-linux-uclibcgnueabihf-ar'
+strip   = '/opt/stb/toolchain/gcc-nationalchip-4.9.4-2018.11-i686_arm-linux-uclibcgnueabihf/bin/arm-nationalchip-linux-uclibcgnueabihf-strip'
+ld      = '/opt/stb/toolchain/gcc-nationalchip-4.9.4-2018.11-i686_arm-linux-uclibcgnueabihf/bin/arm-nationalchip-linux-uclibcgnueabihf-ld'
+
+# Modern meson (>= 1.0) reads per-language compile/link flags from
+# [built-in options] as c_args / c_link_args.
+[built-in options]
+c_args      = ['-mcpu=cortex-a7', '-mfpu=vfpv3-d16', '-mfloat-abi=hard']
+c_link_args = ['-mcpu=cortex-a7', '-mfpu=vfpv3-d16', '-mfloat-abi=hard']
+
+[host_machine]
+system     = 'linux'
+cpu_family = 'arm'
+cpu        = 'cortex-a7'
+endian     = 'little'
