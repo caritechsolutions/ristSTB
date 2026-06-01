@@ -140,7 +140,7 @@ echo ""
 echo "=== STB-side custom programs ==="
 
 # ristsender_marker - links librist + pthread.
-"$CROSS_CC" "${TARGET_FLAGS[@]}" -O2 -Wall \
+"$CROSS_CC" "${TARGET_FLAGS[@]}" -std=gnu99 -O2 -Wall \
     -I "$REPO_ROOT/librist/include" \
     -I "$REPO_ROOT/librist/$BUILD_DIR/include" \
     -I "$REPO_ROOT/librist/$BUILD_DIR/include/librist" \
@@ -150,7 +150,7 @@ echo "=== STB-side custom programs ==="
 check_arm_elf "ristsender_marker" "$MARKERS_DIR/ristsender_marker"
 
 # rist_watchdog - libc only.
-"$CROSS_CC" "${TARGET_FLAGS[@]}" -O2 -Wall \
+"$CROSS_CC" "${TARGET_FLAGS[@]}" -std=gnu99 -O2 -Wall \
     "$REPO_ROOT/rist_watchdog.c" \
     -o "$MARKERS_DIR/rist_watchdog"
 check_arm_elf "rist_watchdog" "$MARKERS_DIR/rist_watchdog"
