@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 #
-# cross-build.sh - Cross-build librist for the NationalChip ARMv7-A (Cortex-A7)
-#                  STB target and confirm the produced shared object is ARM.
+# cross-build.sh - Cross-build librist plus the STB-side custom programs for
+#                  the NationalChip ARMv7-A (Cortex-A7) target, and confirm the
+#                  produced binaries are 32-bit ARM ELFs.
 #
-# This script ONLY verifies that librist cross-compiles. It does not install
-# anything to the host (no `ninja install`) and does not touch the root-level
-# marker programs (ristsender_marker, ristreceiver_with_markers, rist_watchdog).
+# Builds:
+#   - librist (shared object, via meson/ninja)
+#   - ristsender_marker  (links librist + pthread; runs on the box)
+#   - rist_watchdog      (libc-only fork/exec supervisor; runs on the box)
 #
+# Deliberately NOT built:
+#   - ristreceiver_with_markers - runs on the upload/headend side (x86), not
+#     needed on the box.
+#
+# This script does not install anything to the host (no `ninja install`).
 # The actual toolchain only exists on the dedicated build VM, so this is meant
 # to be run there, not in CI on a developer machine.
 
@@ -72,23 +79,87 @@ ninja -C "$BUILD_DIR"
 
 # ---------------------------------------------------------------------------
 # 4. Confirm the produced shared object is a 32-bit ARM ELF.
+#
+# Look only at the real versioned object in the top of the build dir
+# (e.g. build-arm/librist.so.4.5.0). -maxdepth 1 excludes meson's private
+# "*.p/" dir, which contains a 0-byte librist.so.*.symbols file that an
+# unrestricted glob would match and mis-report as a FAIL.
 # ---------------------------------------------------------------------------
-SO_PATH="$(find "$BUILD_DIR" -name 'librist.so*' -type f -print -quit)"
+overall_ok=1
+
+check_arm_elf() {
+    # $1 = label, $2 = path
+    local label="$1" path="$2"
+    if [ ! -f "$path" ]; then
+        echo "FAIL: $label - not produced ($path)" >&2
+        overall_ok=0
+        return
+    fi
+    local out
+    out="$(file "$path")"
+    echo "$out"
+    if echo "$out" | grep -q 'ARM'; then
+        echo "PASS: $label is a 32-bit ARM ELF ($path)"
+    else
+        echo "FAIL: $label is not an ARM ELF ($path)" >&2
+        overall_ok=0
+    fi
+}
+
+SO_PATH="$(find "$BUILD_DIR" -maxdepth 1 -type f -name 'librist.so.*' -print -quit)"
+echo ""
+echo "=== librist shared object ==="
 if [ -z "$SO_PATH" ]; then
-    echo "FAIL: no librist.so* produced under $LIBRIST_DIR/$BUILD_DIR" >&2
-    exit 1
+    echo "FAIL: librist - no librist.so.* produced under $LIBRIST_DIR/$BUILD_DIR" >&2
+    overall_ok=0
+else
+    ls -l "$SO_PATH"
+    check_arm_elf "librist" "$SO_PATH"
 fi
 
-echo ""
-echo "Produced shared object:"
-ls -l "$SO_PATH"
-FILE_OUT="$(file "$SO_PATH")"
-echo "$FILE_OUT"
-echo ""
+# ---------------------------------------------------------------------------
+# 5. Cross-compile the STB-side custom programs against the ARM librist.
+#
+#    /opt/stb/env.sh (sourced above) already put the cross gcc on PATH.
+#    Native build lines, from README.md:
+#      gcc -o ristsender_marker ristsender_marker.c -lrist -lpthread
+#      gcc -o rist_watchdog     rist_watchdog.c
+#
+#    ristsender_marker.c includes <librist/librist.h> and <librist/udpsocket.h>;
+#    its header chain (peer.h / librist_srp.h) pulls in the generated
+#    librist_config.h, which lives under build-arm/include - hence the extra -I.
+#    rist_watchdog.c is libc-only (fork/exec supervisor), so no librist/pthread.
+# ---------------------------------------------------------------------------
+CROSS_CC="${CC:-arm-nationalchip-linux-uclibcgnueabihf-gcc}"
+TARGET_FLAGS=(-mcpu=cortex-a7 -mfpu=vfpv3-d16 -mfloat-abi=hard)
+MARKERS_DIR="$BUILD_DIR/markers"
+rm -rf "$MARKERS_DIR"
+mkdir -p "$MARKERS_DIR"
 
-if echo "$FILE_OUT" | grep -q 'ARM'; then
-    echo "PASS: librist cross-compiled to a 32-bit ARM ELF ($SO_PATH)"
+echo ""
+echo "=== STB-side custom programs ==="
+
+# ristsender_marker - links librist + pthread.
+"$CROSS_CC" "${TARGET_FLAGS[@]}" -O2 -Wall \
+    -I "$REPO_ROOT/librist/include" \
+    -I "$REPO_ROOT/librist/$BUILD_DIR/include" \
+    -I "$REPO_ROOT/librist/$BUILD_DIR/include/librist" \
+    "$REPO_ROOT/ristsender_marker.c" \
+    -L "$LIBRIST_DIR/$BUILD_DIR" -lrist -lpthread \
+    -o "$MARKERS_DIR/ristsender_marker"
+check_arm_elf "ristsender_marker" "$MARKERS_DIR/ristsender_marker"
+
+# rist_watchdog - libc only.
+"$CROSS_CC" "${TARGET_FLAGS[@]}" -O2 -Wall \
+    "$REPO_ROOT/rist_watchdog.c" \
+    -o "$MARKERS_DIR/rist_watchdog"
+check_arm_elf "rist_watchdog" "$MARKERS_DIR/rist_watchdog"
+
+echo ""
+echo "==================================================================="
+if [ "$overall_ok" -eq 1 ]; then
+    echo "OVERALL: PASS - librist + STB-side programs cross-built for ARM"
 else
-    echo "FAIL: $SO_PATH is not an ARM ELF - check the cross file / toolchain" >&2
+    echo "OVERALL: FAIL - see messages above" >&2
     exit 1
 fi
