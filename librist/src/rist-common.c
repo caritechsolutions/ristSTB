@@ -42,9 +42,11 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout,arg);
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer);
 static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
 										struct rist_receiver *receiver_ctx);
-// Add this global variable at the top of rist-common.c
-static struct rist_peer *g_current_recovery_agent = NULL;
-static pthread_mutex_t g_recovery_agent_lock = PTHREAD_MUTEX_INITIALIZER;
+/* The FSR recovery agent used to be cached here, published by send_nack_group()
+ * and read by the FSR thread. Both are gone: the FSR thread now derives it from
+ * the peer list on every cycle, under peerlist_lock, which it already holds. A
+ * cross-thread cached pointer bought nothing and lost the agent entirely on a
+ * link clean enough to send no NACKs. */
 
 
 void remove_peer_from_flow(struct rist_peer *peer);
@@ -1117,10 +1119,13 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		}
 	}
 	
-        // *** ADD THIS: Store the recovery agent for FSR to use ***
-	pthread_mutex_lock(&g_recovery_agent_lock);
-	g_current_recovery_agent = recovery_agent;
-	pthread_mutex_unlock(&g_recovery_agent_lock);
+	/* This used to publish `recovery_agent` into a global for the FSR thread to
+	 * read. It no longer does: FSR selects its own agent from the peer list each
+	 * cycle. Publishing from here was wrong twice over -- the function returns
+	 * at the top when there are no NACKs, so a clean link never set it at all;
+	 * and the assignment ran BEFORE the NULL check below, so a NACK cycle that
+	 * found no live weight-1000 peer actively cleared it. The selection below is
+	 * still local to NACK routing, which is all it was ever meant to decide. */
 
 	// If we found a recovery agent, use it
 	if (recovery_agent != NULL)
@@ -4735,7 +4740,43 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				
 				// Find the single satellite peer and recovery peers
 				struct rist_peer *sat_peer = NULL;
+				/* The FSR agent is derived HERE, from the peer list, on every
+				 * cycle. It used to be published by send_nack_group() into a
+				 * global, which meant it was only ever set as a side effect of
+				 * sending a NACK -- and that function returns immediately when
+				 * f->nacks.counter == 0. On a clean link no NACK is ever sent,
+				 * so the global stayed NULL and FSR failed with "no recovery
+				 * agent available" at exactly the moment the satellite died.
+				 * Packet loss had been masking it: while the link was lossy the
+				 * NACK path ran constantly and kept the pointer populated.
+				 *
+				 * rist_send_fsr_enable() transmits via rist_send_common_rtcp(),
+				 * so the agent must be the is_rtcp peer -- the same object
+				 * send_nack_group() picked, and the one proven on hardware.
+				 * Prefer a live peer by lowest RTT but keep a dead one as
+				 * fallback: the recovery peer flaps (observed "Peer 2 was dead
+				 * for 350 ms and it is now alive again"), and refusing to enable
+				 * FSR during a blip would recreate the same hole this closes.
+				 * FSR Enable is one RTCP packet; if the peer really is gone, the
+				 * retry a second later costs nothing. */
+				struct rist_peer *recovery_agent = NULL;
+				struct rist_peer *recovery_agent_any = NULL;
+				uint64_t recovery_agent_rtt = UINT64_MAX;
+				uint64_t recovery_agent_any_rtt = UINT64_MAX;
 				while (peer) {
+					/* Deliberately outside the is_data gate below: RTCP peers sit
+					 * on the same ctx->PEERS ->next chain (peer_append() links
+					 * every peer there, parented or not) but that gate skips them. */
+					if (peer->is_rtcp && peer->config.weight == 1000) {
+						if (peer->last_rtt < recovery_agent_any_rtt) {
+							recovery_agent_any = peer;
+							recovery_agent_any_rtt = peer->last_rtt;
+						}
+						if (!peer->dead && peer->last_rtt < recovery_agent_rtt) {
+							recovery_agent = peer;
+							recovery_agent_rtt = peer->last_rtt;
+						}
+					}
 					if (peer->is_data && peer->flow) {
 						if (debug_this_cycle) {
 							rist_log_priv(&ctx->common, RIST_LOG_INFO, 
@@ -4816,35 +4857,38 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					}
 				}
 				
+				/* No live agent: fall back to a dead one rather than none. */
+				if (!recovery_agent)
+					recovery_agent = recovery_agent_any;
+
 				if (debug_this_cycle) {
-					rist_log_priv(&ctx->common, RIST_LOG_INFO, 
-						"FSR: Debug - Found %u satellite peers, %u recovery peers\n", 
+					rist_log_priv(&ctx->common, RIST_LOG_INFO,
+						"FSR: Debug - Found %u satellite peers, %u recovery peers\n",
 						sat_peer_count, recovery_peer_count);
+					if (recovery_agent)
+						rist_log_priv(&ctx->common, RIST_LOG_INFO,
+							"FSR: Debug - Recovery agent is peer %u (rtcp, dead=%s, rtt=%u ms)\n",
+							recovery_agent->adv_peer_id,
+							recovery_agent->dead ? "YES" : "NO",
+							(unsigned int)(recovery_agent->last_rtt / RIST_CLOCK));
+					else
+						rist_log_priv(&ctx->common, RIST_LOG_WARN,
+							"FSR: Debug - No weight-1000 RTCP peer in the peer list\n");
 				}
-				
+
 				// Check for "no satellite peer" scenario - enable FSR if only recovery peers exist
 				if (!sat_peer && found_recovery_peer && !fsr_active) {
 					should_enable_fsr = true;
 					rist_log_priv(&ctx->common, RIST_LOG_WARN,
 						"FSR: No satellite peer available, enabling FSR for recovery-only mode\n");
-					
-					// Set recovery agent directly for startup case
-					pthread_mutex_lock(&g_recovery_agent_lock);
-					if (g_current_recovery_agent == NULL) {
-						// Find the recovery peer and set it as recovery agent
-						struct rist_peer *temp_peer = ctx->common.PEERS;
-						while (temp_peer) {
-							if (temp_peer->is_data && temp_peer->flow && temp_peer->config.weight == 1000) {
-								g_current_recovery_agent = temp_peer;
-								rist_log_priv(&ctx->common, RIST_LOG_INFO,
-									"FSR: Set recovery agent to peer %u for startup FSR\n", 
-									temp_peer->adv_peer_id);
-								break;
-							}
-							temp_peer = temp_peer->next;
-						}
-					}
-					pthread_mutex_unlock(&g_recovery_agent_lock);
+					/* The startup patch-up that used to live here is gone: the
+					 * agent is now selected every cycle above, so there is no
+					 * NULL left to repair. It could not have helped anyway --
+					 * sat_peer is assigned for any is_data peer regardless of
+					 * peer->dead, so a dead satellite peer keeps sat_peer
+					 * non-NULL and this branch never ran in the case that
+					 * actually needed it. It also searched is_data peers, which
+					 * is the wrong object to send RTCP through. */
 				}
 				
 				// Check if FSR is working by looking at recovery peer data flow
@@ -4860,13 +4904,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					last_recovery_data_count = recovery_data_received;
 				}
 				
-				// FSR Enable logic - use global recovery agent from NACK processing
+				// FSR Enable logic - agent selected from the peer list above
 				if (should_enable_fsr && !fsr_active) {
-					// Get recovery agent from global variable set by NACK processing
-					pthread_mutex_lock(&g_recovery_agent_lock);
-					struct rist_peer *recovery_agent = g_current_recovery_agent;
-					pthread_mutex_unlock(&g_recovery_agent_lock);
-					
 					if (recovery_agent) {
 						uint32_t flow_id = 0;
 						if (sat_peer && sat_peer->flow) {
@@ -4901,10 +4940,6 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				} else if (fsr_active && should_enable_fsr && sat_peer) {
 					// Send FSR Enable keepalive every 30 seconds (only when satellite peer exists)
 					if ((now - last_fsr_enable_time) >= (30 * ONE_SECOND)) {
-						pthread_mutex_lock(&g_recovery_agent_lock);
-						struct rist_peer *recovery_agent = g_current_recovery_agent;
-						pthread_mutex_unlock(&g_recovery_agent_lock);
-						
 						if (recovery_agent) {
 							if (rist_send_fsr_enable(recovery_agent, sat_peer->flow->flow_id) >= 0) {
 								last_fsr_enable_time = now;
@@ -4915,12 +4950,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					}
 				}
 				
-				// FSR Disable logic - use global recovery agent from NACK processing
+				// FSR Disable logic - agent selected from the peer list above
 				if (should_disable_fsr && fsr_active && sat_peer) {
-					pthread_mutex_lock(&g_recovery_agent_lock);
-					struct rist_peer *recovery_agent = g_current_recovery_agent;
-					pthread_mutex_unlock(&g_recovery_agent_lock);
-					
 					if (recovery_agent) {
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
 							"FSR: Sending FSR Disable via recovery agent %u for satellite flow %u\n", 
@@ -4935,12 +4966,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					}
 				} else if (!fsr_active && last_fsr_disable_time > 0 && sat_peer) {
 					// Send FSR Disable every 5 seconds until we stop (with timeout after 30 seconds)
-					if ((now - last_fsr_disable_time) >= (5 * ONE_SECOND) && 
+					if ((now - last_fsr_disable_time) >= (5 * ONE_SECOND) &&
 						(now - last_fsr_disable_time) < (30 * ONE_SECOND)) {
-						pthread_mutex_lock(&g_recovery_agent_lock);
-						struct rist_peer *recovery_agent = g_current_recovery_agent;
-						pthread_mutex_unlock(&g_recovery_agent_lock);
-						
 						if (recovery_agent) {
 							if (rist_send_fsr_disable(recovery_agent, sat_peer->flow->flow_id) >= 0) {
 								last_fsr_disable_time = now;
