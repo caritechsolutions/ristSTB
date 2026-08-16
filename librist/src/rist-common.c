@@ -2663,8 +2663,40 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		if (errorcode == WSAEWOULDBLOCK)
 			return;
 #endif
-		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errorcode, recv_bufsize, fd);
-		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "%s\n", strerror(errorcode));
+		/* Rate limited, and deliberately so.
+		 *
+		 * A connected UDP socket whose destination becomes unreachable gets an
+		 * ICMP error queued per outgoing packet, and that error is delivered
+		 * HERE as a failed recvfrom. Pulling the WAN with the recovery peer
+		 * connected produced roughly 20 of these a second (one per outgoing
+		 * RTCP), and this used to emit TWO unthrottled lines each. Every line
+		 * is fputs+fflush (logging.c) -- fully synchronous -- to a serial
+		 * console shared with every other process on the box.
+		 *
+		 * That is not merely noisy. This callback runs inside
+		 * evsocket_loop_single(), which the receiver protocol loop calls while
+		 * holding peerlist_lock, and that one event loop services EVERY peer.
+		 * So a dead recovery peer's error spew blocks reception on the healthy
+		 * satellite peer, starves the output buffer and hangs the decoder --
+		 * losing the backup link takes down the primary, which is the exact
+		 * opposite of what the redundancy is for.
+		 *
+		 * The quiesce mechanism already existed on this peer and was simply not
+		 * applied to this path. Suppressed errors are counted and reported with
+		 * the next line, so the rate stays visible rather than being hidden. */
+		peer->log_recv_err_count++;
+		if (now > (peer->log_recv_err_timer + RIST_LOG_QUIESCE_TIMER)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+				"Receive failed on socket %d: errno=%d (%s), ret=%zd%s\n",
+				fd, errorcode, strerror(errorcode), ret,
+				peer->log_recv_err_count > 1 ? " [+ suppressed repeats]" : "");
+			if (peer->log_recv_err_count > 1)
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+					"  (%" PRIu64 " receive errors on this peer since the last report)\n",
+					peer->log_recv_err_count);
+			peer->log_recv_err_timer = now;
+			peer->log_recv_err_count = 0;
+		}
 		return;
 	}
 

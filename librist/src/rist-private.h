@@ -606,6 +606,14 @@ struct rist_peer {
 
 	uint64_t log_repeat_timer;
 
+	/* Separate quiesce state for receive errors. Kept apart from
+	 * log_repeat_timer on purpose: sharing it would let a burst of one error
+	 * class silently suppress the other, and the two report unrelated faults.
+	 * The count preserves the RATE across suppression, which is the diagnostic
+	 * that actually matters when a peer's destination becomes unreachable. */
+	uint64_t log_recv_err_timer;
+	uint64_t log_recv_err_count;
+
 	uint8_t data[SIZEOF_GRE_KEEPALIVE];
 
 	/* VSF TR-06-4 Part 6: Content Selection JSON for outgoing keepalives */
