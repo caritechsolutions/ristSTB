@@ -29,6 +29,42 @@
 #include <assert.h>
 #include <fcntl.h>
 
+/* Gate for send-error logging, shared by every site that reports a failed
+ * transmission to this peer.
+ *
+ * Pulling the WAN while the recovery peer is connected makes every outgoing
+ * RTCP fail with ENETUNREACH, and each failure used to emit three unthrottled
+ * lines -- one from _librist_proto_gre_send_data (the syscall), one from
+ * rist_send_seq_rtcp (the send), one from rist_send_common_rtcp (the
+ * transmission). At the RTCP cadence that is ~30 lines/second of fputs+fflush
+ * (logging.c is fully synchronous) onto a serial console shared with every
+ * other process on the box.
+ *
+ * That is not just noise. receiver_peer_events(), evsocket_loop_single() and
+ * the flow/NACK walk all run in ONE receiver protocol loop, most of it under
+ * peerlist_lock. A console write that blocks in there stops reception, NACK
+ * generation and output for the HEALTHY satellite peer too -- losing the
+ * backup link takes down the primary, the exact opposite of what the
+ * redundancy is for.
+ *
+ * Returns true when the caller may log, and hands back how many send errors
+ * were suppressed since the last report so the rate stays visible instead of
+ * being hidden. All three sites share one gate because they describe the same
+ * event: whichever runs first prints, the others are counted. */
+bool _librist_peer_log_send_err(struct rist_peer *p, uint64_t *suppressed)
+{
+	uint64_t now = timestampNTP_u64();
+
+	p->log_send_err_count++;
+	if (now <= (p->log_send_err_timer + RIST_LOG_QUIESCE_TIMER))
+		return false;
+
+	*suppressed = p->log_send_err_count - 1;
+	p->log_send_err_timer = now;
+	p->log_send_err_count = 0;
+	return true;
+}
+
 // ========== ADD THIS SECTION AT THE TOP OF udp.c ==========
 
 // Global FSR (Full Stream Recovery) tracking for weight-1000 recovery agents
@@ -356,7 +392,23 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 
 out:
 	if (RIST_UNLIKELY(ret <= 0)) {
-		rist_log_priv(ctx, RIST_LOG_ERROR, "\tSend failed: errno=%d, ret=%d, socket=%d\n", errno, ret, p->sd);
+		/* errorcode, not errno: on the GRE path the failing sendto happened
+		 * several calls down in _librist_proto_gre_send_data, and strerror(),
+		 * free() and the logging in between are free to clobber errno. That is
+		 * where the bogus "errno=9" (EBADF) in the WAN-pull logs came from --
+		 * socket p->sd was never invalidated. gre.c now propagates the real
+		 * code back through errno, so read it once, here. */
+		int errorcode_out = errorcode ? errorcode : errno;
+		uint64_t suppressed = 0;
+		if (_librist_peer_log_send_err(p, &suppressed)) {
+			char extra[64] = "";
+			if (suppressed)
+				snprintf(extra, sizeof(extra),
+					" [+%" PRIu64 " suppressed in the last second]", suppressed);
+			rist_log_priv(ctx, RIST_LOG_ERROR,
+				"\tSend failed: errno=%d (%s), ret=%d, socket=%d%s\n",
+				errorcode_out, strerror(errorcode_out), ret, p->sd, extra);
+		}
 	} else {
 		p->stats_sender_instant.sent++;
 		p->stats_receiver_instant.sent_rtcp++;
@@ -394,17 +446,27 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 
 	if ((!p->compression && ret < payload_len) || ret == (size_t)-1)
 	{
-		if (p->address_family == AF_INET6) {
-			// TODO: print IP and port (and error number?)
-			rist_log_priv(cctx, RIST_LOG_ERROR,
-				"\tError on transmission sendto for seq #%"PRIu32"\n", seq_rtp);
-		} else {
-			struct sockaddr_in *sin4 = (struct sockaddr_in *)&p->u.address;
-			unsigned char *ip = (unsigned char *)&sin4->sin_addr.s_addr;
-			rist_log_priv(cctx, RIST_LOG_ERROR,
-				"\tError on transmission sendto, ret=%d to %d.%d.%d.%d:%d/%d, seq #%"PRIu32", %d bytes\n",
-					ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
-					p->local_port, seq_rtp, payload_len);
+		/* Shares the send-error gate with the two sites below it in the call
+		 * stack: a hard sendto failure trips all three within microseconds, so
+		 * only the first prints and the rest are counted. */
+		uint64_t suppressed = 0;
+		if (_librist_peer_log_send_err(p, &suppressed)) {
+			char extra[64] = "";
+			if (suppressed)
+				snprintf(extra, sizeof(extra),
+					" [+%" PRIu64 " suppressed in the last second]", suppressed);
+			if (p->address_family == AF_INET6) {
+				// TODO: print IP and port (and error number?)
+				rist_log_priv(cctx, RIST_LOG_ERROR,
+					"\tError on transmission sendto for seq #%"PRIu32"%s\n", seq_rtp, extra);
+			} else {
+				struct sockaddr_in *sin4 = (struct sockaddr_in *)&p->u.address;
+				unsigned char *ip = (unsigned char *)&sin4->sin_addr.s_addr;
+				rist_log_priv(cctx, RIST_LOG_ERROR,
+					"\tError on transmission sendto, ret=%d to %d.%d.%d.%d:%d/%d, seq #%"PRIu32", %d bytes%s\n",
+						ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
+						p->local_port, seq_rtp, payload_len, extra);
+			}
 		}
 	}
 	else
@@ -1532,10 +1594,17 @@ int rist_send_fsr_enable(struct rist_peer *peer, uint32_t flow_id) {
         &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 
         timestampNTP_u64(), peer->local_port, peer->remote_port, 0);
     
+    /* rist_send_common_rtcp() always returns 0 -- see the TODO at the end of
+     * it: ret is unsigned in there, so its error branch can never be reported
+     * out. This test therefore always passes, which is why the WAN-pull logs
+     * showed "Sent FSR Enable" interleaved with sendto failures for that very
+     * packet. Worded as an attempt until that return contract is fixed;
+     * whether the datagram left the box is answered by the (now gated) send
+     * error lines, not by this one. */
     if (ret >= 0) {
         rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-            "FSR: Sent FSR Enable for flow %u\n", flow_id);
-        
+            "FSR: Sending FSR Enable for flow %u\n", flow_id);
+
         // Add peer to FSR list
         if (add_to_fsr_list(peer->adv_peer_id) == 0) {
             rist_log_priv(get_cctx(peer), RIST_LOG_INFO,

@@ -27,6 +27,7 @@
 #define RIST_MAX_PAYLOAD_OFFSET (sizeof(struct rist_gre_key_seq) + sizeof(struct rist_protocol_hdr))
 
 /* shared functions in udp.c */
+RIST_PRIV bool _librist_peer_log_send_err(struct rist_peer *p, uint64_t *suppressed);
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
 RIST_PRIV int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len);
 RIST_PRIV int rist_receiver_periodic_rtcp(struct rist_peer *peer);

@@ -13,10 +13,12 @@
 #include "peer.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -199,7 +201,22 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 
 	if (RIST_UNLIKELY(errorcode)) {
 		struct rist_common_ctx *ctx = get_cctx(p);
-        rist_log_priv(ctx, RIST_LOG_ERROR, "Send failed: errno=%d, reason=%s, ret=%d, socket=%d, retries=%d\n", errorcode, strerror(errorcode), ret, p->sd, retries);
+		/* Hand the real code back to the caller. rist_send_seq_rtcp() reports
+		 * the same failure and used to read a stale errno by the time it got
+		 * there (strerror/free/logging in between), which is what produced the
+		 * spurious "errno=9" EBADF lines during a WAN pull. */
+		errno = errorcode;
+		/* Gated: see _librist_peer_log_send_err() in udp.c. An unreachable
+		 * destination fails every RTCP, and this runs on the receiver protocol
+		 * thread that also services the healthy peer. */
+		uint64_t suppressed = 0;
+		if (_librist_peer_log_send_err(p, &suppressed)) {
+			char extra[64] = "";
+			if (suppressed)
+				snprintf(extra, sizeof(extra),
+					" [+%" PRIu64 " suppressed in the last second]", suppressed);
+			rist_log_priv(ctx, RIST_LOG_ERROR, "Send failed: errno=%d, reason=%s, ret=%d, socket=%d, retries=%d%s\n", errorcode, strerror(errorcode), ret, p->sd, retries, extra);
+		}
 	} else if (RIST_UNLIKELY(retries > RIST_MAX_SEND_RETRIES / 5)) {
         struct rist_common_ctx *ctx = get_cctx(p);
         rist_log_priv(ctx, RIST_LOG_WARN, "Send Succeded after retries=%d, ret=%d, socket=%d\n", retries, ret, p->sd);

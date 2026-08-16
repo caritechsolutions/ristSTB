@@ -614,6 +614,14 @@ struct rist_peer {
 	uint64_t log_recv_err_timer;
 	uint64_t log_recv_err_count;
 
+	/* Same idea for the transmit side. One failed sendto fans out into up to
+	 * three log lines from three different files (gre.c reports the syscall,
+	 * udp.c reports the send, rist_send_common_rtcp reports the transmission),
+	 * so the gate is shared by all three: the first one through prints, the
+	 * rest are counted. See _librist_peer_log_send_err() in udp.c. */
+	uint64_t log_send_err_timer;
+	uint64_t log_send_err_count;
+
 	uint8_t data[SIZEOF_GRE_KEEPALIVE];
 
 	/* VSF TR-06-4 Part 6: Content Selection JSON for outgoing keepalives */
