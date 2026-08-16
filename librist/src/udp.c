@@ -358,6 +358,15 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algorithm)
 	// The difference should always stay very low < 10
 
+	/* Declared before the simulate_loss block, not after it: that block does
+	 * `goto out`, and the out: label reads errorcode. Declaring it below the
+	 * goto means the jump skips the initialiser and out: reads an
+	 * indeterminate value. GCC 4.9 on the cross toolchain catches this
+	 * (-Wmaybe-uninitialized); GCC 13 stays quiet only because ret > 0 on that
+	 * path so the branch is never taken. It is still wrong either way. */
+	int retries = 0;
+	int errorcode = 0;
+
 	if (RIST_UNLIKELY((p->sender_ctx && p->sender_ctx->simulate_loss) || (p->receiver_ctx && p->receiver_ctx->simulate_loss))) {
 		uint16_t loss_percentage = p->sender_ctx? p->sender_ctx->loss_percentage : p->receiver_ctx->loss_percentage;
 		/* very crude calculation to see if we "randomly" drop packets, good enough for testing */
@@ -368,8 +377,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 		}
 	}
 
-	int retries = 0;
-	int errorcode = 0;
 	if (ctx->profile == RIST_PROFILE_SIMPLE) {
 		// retry when kernel buffer is full instead of dropping packet (EAGAIN)
 		do {
