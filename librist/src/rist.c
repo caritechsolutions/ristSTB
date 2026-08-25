@@ -584,6 +584,44 @@ int rist_sender_npd_disable(struct rist_ctx *rist_ctx)
 	return 0;
 }
 
+int rist_sender_require_selection_enable(struct rist_ctx *rist_ctx)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_require_selection_enable call with null context");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_require_selection_enable call with ctx not set up for sending\n");
+		return -1;
+	}
+	struct rist_sender *ctx = rist_ctx->sender_ctx;
+	ctx->require_selection = true;
+	rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO,
+		"Retransmissions now REQUIRE a registered content selection\n");
+	return 0;
+}
+
+int rist_sender_require_selection_disable(struct rist_ctx *rist_ctx)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_require_selection_disable call with null context");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_require_selection_disable call with ctx not set up for sending\n");
+		return -1;
+	}
+	struct rist_sender *ctx = rist_ctx->sender_ctx;
+	ctx->require_selection = false;
+	rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO,
+		"Retransmissions no longer require a content selection\n");
+	return 0;
+}
+
 int rist_sender_flow_id_set(struct rist_ctx *rist_ctx, uint32_t flow_id)
 {
 	if (RIST_UNLIKELY(!rist_ctx))

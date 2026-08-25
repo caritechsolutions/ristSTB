@@ -70,6 +70,29 @@ RIST_API int rist_sender_npd_enable(struct rist_ctx *ctx);
 RIST_API int rist_sender_npd_disable(struct rist_ctx *ctx);
 
 /**
+ * @brief Require a registered content selection before serving retransmissions
+ *
+ * When enabled, rist_retry_dequeue() refuses to serve a retransmission to any
+ * peer that has no Part 6 content selection registered, and logs the peer id at
+ * WARNING. Intended for Part 8 recovery servers facing a fleet, where answering
+ * an undeclared peer means sending the entire multiplex.
+ *
+ * Disabled by default. Senders that never call this are unaffected.
+ *
+ * @param ctx RIST sender context
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_require_selection_enable(struct rist_ctx *ctx);
+
+/**
+ * @brief Stop requiring a registered content selection (the default)
+ *
+ * @param ctx RIST sender context
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_require_selection_disable(struct rist_ctx *ctx);
+
+/**
  * @brief Retrieve the current flow_id value
  *
  * Retrieve the current flow_id value

@@ -1398,6 +1398,34 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	// Apply PID filtering for NACK retransmissions if peer has program selection
 	// This ensures recovery data is also filtered per contentSelection
 	struct rist_peer *target_peer = retry->peer->peer_data;
+
+	/* Part 8 fleet servers: refuse a retransmission to a peer that has not
+	 * declared what it is watching. Opt-in via
+	 * rist_sender_require_selection_enable(); off by default, so Part 6/7
+	 * senders never reach this branch and behave exactly as before.
+	 *
+	 * Rate limited on purpose. At full-multiplex rates an unthrottled refusal
+	 * would be tens of synchronous log lines per second from the protocol
+	 * thread, which is the failure that already cost us a satellite feed once. */
+	if (ctx->require_selection &&
+	    !program_selection_peer_has_selection(target_peer->adv_peer_id)) {
+		static uint64_t last_refuse_log = 0;
+		static uint64_t refused_since = 0;
+		uint64_t now_refuse = timestampNTP_u64();
+		refused_since++;
+		if (now_refuse > last_refuse_log + RIST_LOG_QUIESCE_TIMER) {
+			rist_log_priv(&ctx->common, RIST_LOG_WARN,
+				"Refusing retransmission to peer %" PRIu32
+				": no content selection registered (%" PRIu64
+				" refused since last report)\n",
+				target_peer->adv_peer_id, refused_since);
+			last_refuse_log = now_refuse;
+			refused_since = 0;
+		}
+		retry->peer->stats_sender_instant.retrans_skip++;
+		return -1;
+	}
+
 	bool skip_filtering = (is_satellite_mode() && target_peer->config.weight == 0);
 	if (!skip_filtering && program_selection_peer_has_selection(target_peer->adv_peer_id)) {
 		// Use filtered send for retransmissions

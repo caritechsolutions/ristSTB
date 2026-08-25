@@ -396,6 +396,19 @@ struct rist_sender {
 	uint32_t max_nacksperloop;
 	bool null_packet_suppression;
 
+	/* Part 8 recovery servers only. When true, a retransmission is refused for
+	 * any peer that has not registered a Part 6 content selection.
+	 *
+	 * Defaults to false, so every existing sender -- the Part 6/7 units
+	 * included -- behaves exactly as before. Only a caller that explicitly
+	 * opts in via rist_sender_require_selection_enable() sees any change.
+	 *
+	 * Rationale: a fleet-facing server must not answer a NACK from a box that
+	 * has never said what it is watching, because unfiltered service of a full
+	 * multiplex is ~15x the filtered size. Failing closed is the right
+	 * direction for the fleet; failing open is not. */
+	bool require_selection;
+
 	/* Sender thread variables */
 	bool protocol_running;
 	pthread_t sender_thread;
