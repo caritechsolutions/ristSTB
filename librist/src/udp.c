@@ -227,7 +227,10 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
             goto send_data;
         }
 
-        if (now - last_filter_log > 5000000000ULL) {
+        /* NTP 64-bit: 2^32 units per second. The literal 5000000000ULL was
+             * meant as 5 s but is 1.16 s, which is why this logged on almost
+             * every keepalive. RIST_CLOCK is units per millisecond. */
+        if (now - last_filter_log > 5000ULL * RIST_CLOCK) {
             rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
                 "Peer %u: Program selection filtering ACTIVE\n",
                 target_peer->adv_peer_id);
@@ -272,7 +275,8 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
 
                             /* Log NPD activity at INFO level */
                             static uint64_t last_npd_log = 0;
-                            if (now - last_npd_log > 5000000000ULL) {
+                            /* 5 s, not the 1.16 s the raw literal gave. */
+                            if (now - last_npd_log > 5000ULL * RIST_CLOCK) {
                                 rist_log_priv(get_cctx(target_peer), RIST_LOG_INFO,
                                     "Peer %u: NPD active - %d NULLs removed per packet (example: %zu -> %zu bytes)\n",
                                     target_peer->adv_peer_id, suppressed, buffer->size, filtered_len);

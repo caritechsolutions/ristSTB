@@ -1115,11 +1115,26 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		if (check->is_rtcp && !check->dead && check->config.weight == 1000)
 		{
 			// Found a weight-1000 recovery agent
-			// If multiple recovery agents exist, select the one with lowest RTT
-			if (check->last_rtt < recovery_agent_rtt)
+			// If multiple recovery agents exist, select the one with lowest RTT.
+			//
+			// last_rtt == 0 means NOT YET MEASURED, not "zero latency". The peer
+			// struct is calloc'd in peer_initialize() and last_rtt is written in
+			// exactly one place, rist_rtcp_handle_echo_response(), so it stays 0
+			// until the first echo response comes back. Without this guard an
+			// unmeasured peer wins every comparison and keeps winning until its
+			// first echo lands -- harmless with a single recovery peer, wrong in
+			// exactly the multi-peer case this selection exists for.
+			if (check->last_rtt != 0 && check->last_rtt < recovery_agent_rtt)
 			{
 				recovery_agent = check;
 				recovery_agent_rtt = check->last_rtt;
+			}
+			else if (recovery_agent == NULL)
+			{
+				// Nothing measured yet: keep a candidate so an unmeasured peer is
+				// still preferred over having no recovery agent at all. Replaced
+				// by the first peer that reports a real RTT.
+				recovery_agent = check;
 			}
 		}
 	}
@@ -3059,7 +3074,18 @@ protocol_bypass:
 					/* Found contentSelection - store it for this peer */
 					char *content_str = cJSON_Print(json);
 					if (content_str) {
-						if (program_selection_add_peer(p->adv_peer_id, content_str) == 0) {
+						/* The selection rides the RTCP keepalive, so it arrives
+						 * once a second for the life of the peer. Re-parsing,
+						 * re-printing and rebuilding every PID array each time
+						 * is real work for no change, and logging it as a state
+						 * change on every receipt buries the changes that matter.
+						 * Act on CHANGE, not on receipt. A peer whose entry was
+						 * freed compares as changed, so it is re-registered
+						 * rather than skipped.
+						 */
+						if (program_selection_selection_unchanged(p->adv_peer_id, content_str)) {
+							/* nothing to do */
+						} else if (program_selection_add_peer(p->adv_peer_id, content_str) == 0) {
 							rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 								"Updated program selection for peer %u\n", p->adv_peer_id);
 						} else {

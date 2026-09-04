@@ -30,6 +30,14 @@ struct peer_program_selection {
     char *destination_ip;                      /* Destination IP (optional) */
     char *source_ip;                           /* Source IP (optional) */
     
+    /* The raw JSON this selection was built from.
+     *
+     * Kept so an unchanged selection can be recognised without rebuilding it.
+     * The selection arrives on EVERY RTCP keepalive -- once per second, per peer
+     * -- and was previously re-parsed, re-printed and re-registered each time,
+     * logging a state change on every receipt. */
+    char *raw_json;
+
     /* Linked list management */
     struct peer_program_selection *next;       /* Next entry in list */
 };
@@ -153,6 +161,15 @@ int apply_null_packet_deletion(const uint8_t *input_data, size_t input_len,
  * @param peer_id Peer ID for program selection lookup
  * @return 0 on success, -1 on error, >0 number of NULL packets removed
  */
+/**
+ * @brief Is the stored selection for this peer byte-identical to json_content?
+ *
+ * Returns false when the peer has no stored selection at all, so an unchanged
+ * verdict always implies the selection is still registered -- a peer whose entry
+ * was freed will be re-registered rather than skipped.
+ */
+bool program_selection_selection_unchanged(uint32_t peer_id, const char *json_content);
+
 int filter_and_compress_for_peer(const uint8_t *input_data, size_t input_len,
                                 uint8_t *output_data, size_t *output_len,
                                 size_t max_output_len, uint32_t peer_id);

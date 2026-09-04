@@ -122,6 +122,8 @@ int program_selection_add_peer(uint32_t peer_id, const char *json_content)
         free(selection->blocked_pids);
         free(selection->destination_ip);
         free(selection->source_ip);
+        free(selection->raw_json);
+        selection->raw_json = NULL;
     } else {
         /* Create new entry */
         selection = calloc(1, sizeof(struct peer_program_selection));
@@ -139,6 +141,9 @@ int program_selection_add_peer(uint32_t peer_id, const char *json_content)
     
     /* Initialize selection */
     selection->has_selection = true;
+    /* Remember the exact bytes this was built from, so an identical keepalive
+     * can be recognised as a no-op instead of rebuilding everything. */
+    selection->raw_json = strdup(json_content);
     selection->requested_programs = NULL;
     selection->blocked_programs = NULL;
     selection->requested_pids = NULL;
@@ -1101,6 +1106,19 @@ int filter_and_compress_for_peer(const uint8_t *input_data, size_t input_len,
     return 0;
 }
 
+bool program_selection_selection_unchanged(uint32_t peer_id, const char *json_content)
+{
+    if (!json_content || !program_selection_initialized) {
+        return false;
+    }
+    pthread_mutex_lock(&program_selection_lock);
+    struct peer_program_selection *sel = find_peer_selection_locked(peer_id);
+    bool same = (sel && sel->has_selection && sel->raw_json &&
+                 strcmp(sel->raw_json, json_content) == 0);
+    pthread_mutex_unlock(&program_selection_lock);
+    return same;
+}
+
 /* Internal helper functions */
 
 static void free_peer_program_selection(struct peer_program_selection *selection)
@@ -1115,6 +1133,7 @@ static void free_peer_program_selection(struct peer_program_selection *selection
     free(selection->blocked_pids);
     free(selection->destination_ip);
     free(selection->source_ip);
+    free(selection->raw_json);
     free(selection);
 }
 
