@@ -217,7 +217,9 @@ static void send_filtered_data_to_peer(struct rist_peer *target_peer, struct ris
 
         /* Warn if sender is using -n flag - it prevents proper filtering */
         if (buffer_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT) {
-            if (now - last_filter_log > 10000000000ULL) {
+            /* Same NTP units correction as the two sites below: 2^32 units per
+             * second, so the raw literal was 2.33 s, not the 10 s intended. */
+            if (now - last_filter_log > 10000ULL * RIST_CLOCK) {
                 rist_log_priv(get_cctx(target_peer), RIST_LOG_WARN,
                     "Peer %u: WARNING - Do not use -n flag with program selection! Remove -n and restart sender.\n",
                     target_peer->adv_peer_id);
