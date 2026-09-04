@@ -117,6 +117,11 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 					output_udp_config->multiplex_mode = (uint8_t)temp;
 /*UNUSED TODO} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_MULTIPLEX_FILTER) == 0) {
 				strncpy((void *)output_udp_config->multiplex_filter, val, RIST_MAX_STRING_SHORT -1); */
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_PCR_CUT) == 0) {
+				int temp = atoi( val );
+				/* A PID, so 1..0x1FFE. 0 and out-of-range both leave it off. */
+				if (temp > 0 && temp < 0x1FFF)
+					output_udp_config->pcr_cut = (uint16_t)temp;
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);

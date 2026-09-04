@@ -108,6 +108,14 @@ struct rist_udp_config
 	uint16_t stream_id;
 	enum librist_multiplex_mode multiplex_mode;
 	char multiplex_filter[RIST_MAX_STRING_SHORT];//Future usage
+	/* VSF TR-06-4 Part 8: PCR-boundary packetisation.
+	 * 0 (the default) = OFF, and the input path behaves exactly as it always
+	 * has -- one datagram in, one RTP payload out. Non-zero = the PCR PID of
+	 * the service, and the sender re-frames its input into payloads that start
+	 * at every packet carrying a PCR on that PID. One field carries both the
+	 * enable and the PID so there is no state where cutting is on but the PID
+	 * is unknown. */
+	uint16_t pcr_cut;
 };
 
 #ifdef __cplusplus

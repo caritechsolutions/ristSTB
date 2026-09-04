@@ -41,6 +41,7 @@
 #define RIST_URL_PARAM_RTP_TIMESTAMP "rtp-timestamp"
 #define RIST_URL_PARAM_RTP_SEQUENCE "rtp-sequence"
 #define RIST_URL_PARAM_RTP_OUTPUT_PTYPE "rtp-ptype"
+#define RIST_URL_PARAM_PCR_CUT "pcr_cut"
 #define RIST_URL_PARAM_MULTIPLEX_MODE "multiplex-mode"
 #define RIST_URL_PARAM_MULTIPLEX_FILTER "multiplex-filter"
 /* Rist additional parameter names */

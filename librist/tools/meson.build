@@ -29,7 +29,12 @@ if compile_prometheus
 endif
 
 executable('ristsender',
-	['ristsender.c', 'yamlparse.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
+	# src/pcr_cut.c is compiled INTO the tool rather than exported from the
+	# shared library: its entry points are RIST_PRIV (hidden), and widening the
+	# public ABI of the fork for a single consumer is not worth it. The source
+	# still lives in src/ so there is exactly one copy, versioned with the
+	# protocol code it belongs to.
+	['ristsender.c', 'yamlparse.c', 'oob_shared.c', '../src/pcr_cut.c', srp_shared, tools_deps, rev_target],
 	dependencies: [
 		librist_dep,
 		threads,

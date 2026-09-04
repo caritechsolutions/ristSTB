@@ -33,6 +33,7 @@
 #include <linux/if_tun.h>
 #endif
 #include "yamlparse.h"
+#include "pcr_cut.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #define strtok_r strtok_s
@@ -65,6 +66,10 @@ struct rist_callback_object {
 	struct rist_ctx_wrap *sender_ctx;
 	struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE + 100];
+	/* Part 8 PCR-boundary packetisation. Off unless the input URL carried
+	 * ?pcr_cut=<pid>; when off nothing here is touched or read. */
+	bool pcr_cut_enabled;
+	struct rist_pcr_cut pcr_cut;
 };
 
 #ifdef USE_TUN
@@ -285,6 +290,13 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			data_block.payload_len = recv_bufsize - offset;
 		}
 		if (peer_connected_count) {
+			if (callback_object->pcr_cut_enabled) {
+				/* Re-cut the stream on PCR boundaries. Input framing is
+				 * discarded; see pcr_cut.c. */
+				if (rist_pcr_cut_feed(&callback_object->pcr_cut, data_block.payload,
+						data_block.payload_len, callback_object->sender_ctx->ctx) < 0)
+					rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing data in input_udp_recv (pcr_cut), socket=%d\n", callback_object->sd);
+			} else
 			if (rist_sender_data_write(callback_object->sender_ctx->ctx, &data_block) < 0)
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing data in input_udp_recv, socket=%d\n", callback_object->sd);
 		}
@@ -1074,6 +1086,13 @@ int main(int argc, char *argv[])
 				atleast_one_socket_opened = true;
 			}
 			callback_object[i].udp_config = udp_config;
+			if (udp_config->pcr_cut) {
+				rist_pcr_cut_init(&callback_object[i].pcr_cut, udp_config->pcr_cut);
+				callback_object[i].pcr_cut_enabled = true;
+				rist_log(&logging_settings, RIST_LOG_INFO,
+					"PCR-boundary packetisation ON, PCR PID 0x%04X: payloads start at each PCR, then greedy 7\n",
+					udp_config->pcr_cut);
+			}
 			udp_config = NULL;
 			callback_object[i].evctx = evctx;
 			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr,
