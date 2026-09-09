@@ -45,9 +45,39 @@
  *
  * OFF BY DEFAULT. When cfg->pcr_cut is 0 the caller does not route through here
  * at all and the original one-in-one-out path runs untouched.
+ *
+ * PID FILTERING, AND WHY IT LIVES HERE
+ * ------------------------------------
+ * The box captures the WHOLE transponder -- 59 Mb/s, 201 PIDs -- because that is
+ * the only way its demux will hand over the broadcast PSI the repair needs; a
+ * demux slot takes one scalar PID and there are not enough of them. But 59 Mb/s
+ * is more than the box can carry through a RIST hop: librist allocates two
+ * mallocs per packet and holds them for the buffer window, which at 2000 ms is
+ * ~17 MB in the sender's retransmit queue and ~17 MB again in the receiver, on a
+ * box with 54 MB managed and ~25 MB free. It does not fit, and the failure is
+ * not a clean error -- it is packets silently dropped inside librist, a NACK
+ * storm chasing them, and eventually the OOM killer.
+ *
+ * So the stream has to be cut down to the service before the RIST hop, and this
+ * is the right place for the gate for two reasons:
+ *
+ *   - The far end filters too, with tsp -P filter --pid, and byte-identity is
+ *     the whole basis of the repair. tsp runs BEFORE the headend's cutter, so
+ *     the box must filter before its cutter as well: cut first and the PCR
+ *     boundaries would be computed over a stream the other side never saw, and
+ *     the greedy-7 packing inside every interval would differ.
+ *
+ *   - feed_packet() already has a whole, sync-checked, 188-byte packet in hand.
+ *     A filter anywhere upstream of the cutter would need its own copy of the
+ *     re-sync and partial-carry logic below, and two alignment implementations
+ *     that must agree forever is exactly what this file exists to avoid.
+ *
+ * The gate itself is deliberately dumb -- a bitmap test, no table parsing, no
+ * implicit PIDs. See rist_pcr_cut_set_filter().
  */
 
 #include "pcr_cut.h"
+#include <stdlib.h>
 #include <string.h>
 
 #define TS_SYNC        0x47
@@ -58,7 +88,57 @@ void rist_pcr_cut_init(struct rist_pcr_cut *c, uint16_t pcr_pid)
 {
 	memset(c, 0, sizeof(*c));
 	c->pcr_pid = pcr_pid;
+	c->anchor = (pcr_pid != 0);
 	c->seen_first_pcr = false;
+}
+
+/* Parse the keep-list into the bitmap. See the header for why nothing is added
+ * implicitly and why a malformed list is refused rather than partially applied. */
+int rist_pcr_cut_set_filter(struct rist_pcr_cut *c, const char *list)
+{
+	const char *p = list;
+	uint16_t n = 0;
+
+	if (!c || !list)
+		return -1;
+
+	memset(c->keep, 0, sizeof(c->keep));
+	c->filter_on = false;
+	c->filter_npids = 0;
+
+	while (*p) {
+		unsigned long v;
+		char *end;
+
+		while (*p == ',' || *p == ' ' || *p == '\t')
+			p++;
+		if (!*p)
+			break;
+
+		/* Base 0 so both 17 and 0x11 are accepted -- the box builds this list
+		 * from a JSON array of decimals, a human editing a knob file will reach
+		 * for hex, and neither should be a silent no-match. */
+		v = strtoul(p, &end, 0);
+		if (end == p)
+			return -1;                     /* not a number */
+		if (v >= RIST_PCR_CUT_NUM_PIDS)
+			return -1;                     /* not a PID */
+		if (*end && *end != ',' && *end != ' ' && *end != '\t')
+			return -1;                     /* trailing junk, e.g. "17x" */
+
+		if (!(c->keep[v >> 3] & (uint8_t)(1u << (v & 7)))) {
+			c->keep[v >> 3] |= (uint8_t)(1u << (v & 7));
+			n++;
+		}
+		p = end;
+	}
+
+	if (n == 0)
+		return -1;
+
+	c->filter_npids = n;
+	c->filter_on = true;
+	return 0;
 }
 
 /* True if this packet carries a PCR on our PCR PID.
@@ -113,22 +193,40 @@ static int feed_packet(struct rist_pcr_cut *c, const uint8_t *pkt, struct rist_c
 {
 	int ret = 0;
 
-	if (packet_has_pcr(pkt, c->pcr_pid)) {
-		/* Flush BEFORE appending, so the PCR packet always lands at offset 0
-		 * of a payload and the greedy-7 counter restarts there. This ordering
-		 * is the whole mechanism: get it backwards and the two sides split
-		 * differently inside every interval while still agreeing on where
-		 * intervals begin. */
-		ret = flush(c, ctx);
-		c->seen_first_pcr = true;
-		c->pcr_count++;
-	} else if (!c->seen_first_pcr) {
-		/* Bytes before the first PCR belong to an interval we did not see the
-		 * start of. Dropping them is what lets each side begin cleanly at its
-		 * own first PCR -- the two sides generally start at different PCRs and
-		 * absolute alignment is the anchor's job, not ours. */
-		c->dropped_pre_pcr++;
-		return 0;
+	/* THE FILTER GATE, before anything else in this function looks at the
+	 * packet. A dropped packet must not flush, must not count, must not be
+	 * appended -- it must be as if it never arrived, because on the far end tsp
+	 * removed it before the cutter ever saw it. */
+	if (c->filter_on) {
+		uint16_t pid = (uint16_t)(((pkt[1] & 0x1F) << 8) | pkt[2]);
+
+		if (!(c->keep[pid >> 3] & (uint8_t)(1u << (pid & 7)))) {
+			c->filtered_out++;
+			return 0;
+		}
+	}
+
+	/* c->anchor is false only in filter-only mode; Part 8 repair always has it
+	 * on, and without it there is no boundary the far end can agree with. */
+	if (c->anchor) {
+		if (packet_has_pcr(pkt, c->pcr_pid)) {
+			/* Flush BEFORE appending, so the PCR packet always lands at offset
+			 * 0 of a payload and the greedy-7 counter restarts there. This
+			 * ordering is the whole mechanism: get it backwards and the two
+			 * sides split differently inside every interval while still
+			 * agreeing on where intervals begin. */
+			ret = flush(c, ctx);
+			c->seen_first_pcr = true;
+			c->pcr_count++;
+		} else if (!c->seen_first_pcr) {
+			/* Bytes before the first PCR belong to an interval we did not see
+			 * the start of. Dropping them is what lets each side begin cleanly
+			 * at its own first PCR -- the two sides generally start at
+			 * different PCRs and absolute alignment is the anchor's job, not
+			 * ours. */
+			c->dropped_pre_pcr++;
+			return 0;
+		}
 	}
 
 	memcpy(c->pending + (size_t)c->n_pkts * TS_PKT, pkt, TS_PKT);

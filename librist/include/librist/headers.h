@@ -116,6 +116,15 @@ struct rist_udp_config
 	 * enable and the PID so there is no state where cutting is on but the PID
 	 * is unknown. */
 	uint16_t pcr_cut;
+	/* VSF TR-06-4 Part 8: keep-list of PIDs, as it appeared on the URL.
+	 *
+	 * Carried as the raw string rather than a parsed bitmap so there is exactly
+	 * ONE parser for it, in pcr_cut.c, shared by both ends of the repair. A
+	 * second parser here would be a second thing to keep in step, and the two
+	 * ends must agree on this list to the PID.
+	 *
+	 * Empty (the default) = no filtering, and the gate never runs. */
+	char pid_filter[RIST_MAX_STRING_LONG];
 };
 
 #ifdef __cplusplus

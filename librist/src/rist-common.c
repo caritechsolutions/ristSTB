@@ -122,6 +122,21 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				/* A PID, so 1..0x1FFE. 0 and out-of-range both leave it off. */
 				if (temp > 0 && temp < 0x1FFF)
 					output_udp_config->pcr_cut = (uint16_t)temp;
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_PIDS) == 0) {
+				/* Copied verbatim and validated later by rist_pcr_cut_set_filter(),
+				 * the single parser both ends of a Part 8 repair share. The only
+				 * judgement made here is that it FITS: a list silently truncated
+				 * to the field width would filter to a SHORT set, and a short set
+				 * is the failure that looks like a working channel while dropping
+				 * audio -- so refuse the URL instead. */
+				if (strlen(val) >= sizeof(output_udp_config->pid_filter)) {
+					ret = -1;
+					fprintf(stderr, "PID list too long (%u bytes, max %u): %s\n",
+						(unsigned)strlen(val),
+						(unsigned)(sizeof(output_udp_config->pid_filter) - 1), val);
+				} else {
+					strcpy((void *)output_udp_config->pid_filter, val);
+				}
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
