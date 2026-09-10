@@ -2030,6 +2030,11 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	/* * * * * * * * * * * * * * * * * * * */
 	/**************** WIP *****************/
 	peer->stats_receiver_instant.received++;
+	/* MEDIA liveness, kept separately from last_pkt_received because that one is
+	 * also stamped by keepalives. See the field's comment in rist-private.h: the
+	 * FSR loop needs "is this peer still delivering content", and only this line
+	 * can answer it. */
+	peer->last_data_received = timestampNTP_u64();
 
 	uint64_t rtt;
 	rtt = peer->eight_times_rtt / 8;
@@ -4778,6 +4783,21 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	uint64_t checks_next_time = now;
 	uint64_t buffer_check_next_time = now + ONE_SECOND;
 	
+	/* How long the satellite peer may deliver no media before FSR treats the
+	 * feed as gone. See condition 4 below for why a media-specific test is
+	 * needed at all.
+	 *
+	 * 500 ms is chosen against two numbers. The stream itself: the box cuts at
+	 * PCR boundaries and this transponder's PCR interval measures 19 ms, so a
+	 * healthy sender emits ~52 times a second and 500 ms of nothing is 26
+	 * missed emissions -- decisive, not jitter. And the buffer: this loop only
+	 * evaluates once a second, so real detection lands between 0.5 s and 1.5 s,
+	 * which has to fit inside the receiver buffer for the takeover to be
+	 * seamless. At the 2000 ms the chain runs with, it does. Raising the buffer
+	 * gives more margin; lowering it below ~1500 ms does not leave enough and
+	 * the switch will be audible. */
+	const uint64_t RIST_FSR_DATA_STALL_MS = 500;
+
 	// FSR variables - moved outside loop to ensure they persist
 	uint64_t fsr_check_next_time = 0;
 	uint64_t last_fsr_enable_time = 0;
@@ -4906,14 +4926,39 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					uint64_t time_since_sat_packet = (now - sat_peer->last_pkt_received) / RIST_CLOCK;
 					uint32_t sat_rtt_ms = sat_peer->last_rtt / RIST_CLOCK;
 					bool sat_peer_dead = sat_peer->dead;
-					
+					/* MEDIA silence, which is a different question from packet
+					 * silence. UINT64_MAX stands for "never delivered anything",
+					 * which the stall test below deliberately does NOT treat as
+					 * a stall -- a peer that has not started yet is conditions
+					 * 1 and 2's business, not this one's. */
+					uint64_t time_since_sat_data = sat_peer->last_data_received
+						? (now - sat_peer->last_data_received) / RIST_CLOCK
+						: UINT64_MAX;
+					bool sat_ever_delivered = (sat_peer->last_data_received != 0);
+
 					if (debug_this_cycle) {
-						rist_log_priv(&ctx->common, RIST_LOG_INFO, 
-							"FSR: Debug - Satellite peer %u: received=%llu, dead=%s, time_since_pkt=%llu ms, rtt=%u ms\n", 
-							sat_peer->adv_peer_id, (unsigned long long)sat_received, 
+						rist_log_priv(&ctx->common, RIST_LOG_INFO,
+							"FSR: Debug - Satellite peer %u: received=%llu, dead=%s, time_since_pkt=%llu ms, rtt=%u ms\n",
+							sat_peer->adv_peer_id, (unsigned long long)sat_received,
 							sat_peer_dead ? "YES" : "NO", (unsigned long long)time_since_sat_packet, sat_rtt_ms);
+						/* Printed right next to time_since_pkt on purpose. When the
+						 * feed goes away these two DIVERGE -- packets 20 ms ago,
+						 * media 9000 ms ago -- and that divergence is the whole
+						 * diagnosis. Reading them together is how to tell "the
+						 * link is down" from "the link is fine and the feed is
+						 * gone", which the log previously could not distinguish. */
+						if (sat_ever_delivered)
+							rist_log_priv(&ctx->common, RIST_LOG_INFO,
+								"FSR: Debug - Satellite peer %u media silent for %llu ms (stall threshold %u ms)\n",
+								sat_peer->adv_peer_id,
+								(unsigned long long)time_since_sat_data,
+								(unsigned int)RIST_FSR_DATA_STALL_MS);
+						else
+							rist_log_priv(&ctx->common, RIST_LOG_INFO,
+								"FSR: Debug - Satellite peer %u has never delivered media; the stall test is held off until it does\n",
+								sat_peer->adv_peer_id);
 					}
-					
+
 					// FSR Enable conditions - based on satellite peer health ONLY
 					// Condition 1: Peer is marked dead
 					if (sat_peer_dead) {
@@ -4932,14 +4977,51 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					else if (sat_rtt_ms > 500) {  // >500ms RTT indicates severe issues
 						should_enable_fsr = true;
 						rist_log_priv(&ctx->common, RIST_LOG_WARN,
-							"FSR: Satellite peer %u high RTT (%u ms)\n", 
+							"FSR: Satellite peer %u high RTT (%u ms)\n",
 							sat_peer->adv_peer_id, sat_rtt_ms);
 					}
-					
+					/* Condition 4: THE FEED IS GONE THOUGH THE PEER IS NOT.
+					 *
+					 * Conditions 1-3 all reduce to last_pkt_received or dead, and
+					 * both of those are refreshed by RTCP keepalives. A sender
+					 * whose INPUT has stopped -- RF cable pulled, tuner unlocked,
+					 * headend feed down -- keeps its socket and its keepalives, so
+					 * it stays alive, forever, at "received=0, dead=NO,
+					 * time_since_pkt=20ms". None of 1-3 can see that, and FSR
+					 * therefore never engages at exactly the moment it is the
+					 * whole point of the system. Confirmed on hardware: RF cable
+					 * out, FSR stayed NO.
+					 *
+					 * Part 7 dodged it from the outside, by having its sender exit
+					 * on marker silence so the peer would die for real. Part 8's
+					 * sender has no marker to detect silence on and no watchdog to
+					 * restart it afterwards, so the test belongs here, on the fact
+					 * itself: this peer has stopped delivering MEDIA.
+					 *
+					 * Only once it has delivered some. A peer still coming up has
+					 * never delivered anything and must not be read as a stall --
+					 * that would enable FSR on every start, before the local feed
+					 * has even primed. */
+					else if (sat_ever_delivered && time_since_sat_data > RIST_FSR_DATA_STALL_MS) {
+						should_enable_fsr = true;
+						rist_log_priv(&ctx->common, RIST_LOG_WARN,
+							"FSR: Satellite peer %u has sent no media for %llu ms "
+							"(keepalives still arriving %llu ms ago -- the peer is up and the FEED is gone)\n",
+							sat_peer->adv_peer_id,
+							(unsigned long long)time_since_sat_data,
+							(unsigned long long)time_since_sat_packet);
+					}
+
 					// FSR Disable condition - satellite peer is healthy
 					if (fsr_active && !should_enable_fsr) {
-						// Satellite is healthy if: not dead, recent packets, good RTT
-						if (!sat_peer_dead && 
+						/* Healthy means DELIVERING, not merely reachable. Without
+						 * the media test a keepalive-only peer would satisfy every
+						 * clause below and tear FSR down while the feed was still
+						 * absent -- the same blind spot condition 4 exists to
+						 * close, arriving from the other side. */
+						if (!sat_peer_dead &&
+							sat_ever_delivered &&
+							time_since_sat_data < RIST_FSR_DATA_STALL_MS &&
 							time_since_sat_packet < 1000 &&  // Packets within last second
 							sat_rtt_ms < 200) {              // RTT under 200ms
 							should_disable_fsr = true;

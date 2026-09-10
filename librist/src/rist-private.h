@@ -596,6 +596,23 @@ struct rist_peer {
 	uint64_t birthtime_peer;
 	uint64_t birthtime_local;
 
+	/* WHEN THIS PEER LAST DELIVERED A MEDIA PACKET, as distinct from
+	 * last_pkt_received, which is stamped by ANY datagram including an RTCP
+	 * keepalive. That distinction is the whole of the FSR problem.
+	 *
+	 * librist's liveness test -- and therefore peer->dead, and therefore FSR --
+	 * counts keepalives, so a sender whose input has gone away but whose process
+	 * is still up keeps its peer alive forever. Observed on hardware as
+	 * "received=0, dead=NO, time_since_pkt=20ms" while the feed was plainly
+	 * gone. Part 7 worked around it by having the sender EXIT on marker silence
+	 * so the peer would die for real; Part 8's sender has no marker to go silent
+	 * on and no watchdog to restart it, so it needs the underlying fact instead.
+	 *
+	 * Stamped in rist_receiver_recv_data() only. Zero until the first media
+	 * packet ever, which is what lets the stall test tell "has not started yet"
+	 * apart from "has stopped". */
+	uint64_t last_data_received;
+
 	/* bw estimation */
 	struct rist_bandwidth_estimation bw;
 	struct rist_bandwidth_estimation retry_bw;
