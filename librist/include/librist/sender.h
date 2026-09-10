@@ -115,6 +115,37 @@ RIST_API int rist_sender_flow_id_get(struct rist_ctx *ctx, uint32_t *flow_id);
 RIST_API int rist_sender_flow_id_set(struct rist_ctx *ctx, uint32_t flow_id);
 
 /**
+ * @brief Seed the sender's starting RTP sequence number
+ *
+ * Sharing a flow id with another sender is not enough to make the two
+ * substitutable: a flow does not share a SEQUENCE SPACE, so a receiver that
+ * switches between them reads the switch as an enormous hole, flushes past it
+ * and stalls waiting for the new source's packets to mature. Seeding both ends
+ * to the same sequence for the same content removes the hole entirely.
+ *
+ * Only meaningful when both senders frame identically -- same input bytes, same
+ * payload boundaries -- so that equal starting sequences stay equal.
+ *
+ * MUST be called before rist_start(); afterwards the counter is live and the
+ * call is refused rather than renumbering packets already in the retransmit
+ * queue.
+ *
+ * @param ctx RIST sender context
+ * @param seq starting sequence number
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_seq_set(struct rist_ctx *ctx, uint32_t seq);
+
+/**
+ * @brief Retrieve the sender's current RTP sequence counter
+ *
+ * @param ctx RIST sender context
+ * @param seq pointer to your sequence variable
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_seq_get(struct rist_ctx *ctx, uint32_t *seq);
+
+/**
  * @brief Write data into a librist packet.
  *
  * One sender can send write data into a librist packet.

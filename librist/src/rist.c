@@ -645,6 +645,77 @@ int rist_sender_flow_id_set(struct rist_ctx *rist_ctx, uint32_t flow_id)
 	return 0;
 }
 
+/* SEED THE SENDER'S RTP SEQUENCE.
+ *
+ * Two senders can share a flow id and still be unusable as substitutes for each
+ * other, because sharing a flow does not share a SEQUENCE SPACE. Observed on
+ * hardware during an FSR handover: the box and the headend were both in flow
+ * 1342177284 with independent counters, and the receiver read the switch as a
+ * 46,191-packet hole one way and 14,074 the other -- the two summing to exactly
+ * one wrap of the 16-bit ring, which is the proof that neither number was a real
+ * loss. The output thread then has to flush past the hole and wait for the new
+ * source's packets to mature (rist-common.c, the delay1/target_output_time gate),
+ * which drains the buffer to zero and shows up as a stall at the splice.
+ *
+ * Seeding closes that. Both ends cut identical bytes at identical PCR boundaries
+ * and fill greedily to the same payload size, so equal starting sequences stay
+ * equal: the same PCR carries the same sequence number at both ends, the
+ * substitute packet lands in the slot the receiver was already waiting on, and
+ * there is no hole to flush.
+ *
+ * MUST be called before rist_start(). After that the counter is live and moving
+ * it would renumber packets already in the retransmit queue, so the call is
+ * refused rather than allowed to corrupt the queue.
+ *
+ * Upstream left the intent visible as two commented-out assignments to
+ * common.seq at the top of this file; this is the same seed with a way to reach
+ * it from outside and a guard on when.
+ */
+int rist_sender_seq_set(struct rist_ctx *rist_ctx, uint32_t seq)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_seq_set call with null context");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_seq_set call with ctx not set up for sending\n");
+		return -1;
+	}
+	struct rist_sender *ctx = rist_ctx->sender_ctx;
+	pthread_mutex_lock(&ctx->mutex);
+	bool running = ctx->protocol_running;
+	pthread_mutex_unlock(&ctx->mutex);
+	if (RIST_UNLIKELY(running))
+	{
+		rist_log_priv2(ctx->common.logging_settings, RIST_LOG_ERROR,
+			"rist_sender_seq_set called after rist_start -- refusing, moving the counter "
+			"now would renumber packets already in the retransmit queue\n");
+		return -1;
+	}
+	ctx->common.seq = seq;
+	rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO,
+		"Sender RTP sequence seeded to %" PRIu32 " (wire %u)\n", seq, (unsigned)(seq & 0xFFFF));
+	return 0;
+}
+
+int rist_sender_seq_get(struct rist_ctx *rist_ctx, uint32_t *seq)
+{
+	if (RIST_UNLIKELY(!rist_ctx || !seq))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_seq_get call with null argument");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_seq_get call with ctx not set up for sending\n");
+		return -1;
+	}
+	*seq = rist_ctx->sender_ctx->common.seq;
+	return 0;
+}
+
 int rist_sender_data_write(struct rist_ctx *rist_ctx, const struct rist_data_block *data_block)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
