@@ -122,6 +122,22 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				/* A PID, so 1..0x1FFE. 0 and out-of-range both leave it off. */
 				if (temp > 0 && temp < 0x1FFF)
 					output_udp_config->pcr_cut = (uint16_t)temp;
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_FLOW_ID) == 0) {
+				/* The SSRC this sender must advertise so it shares a flow with
+				 * the far end. Accepts decimal or 0x hex. Rejected rather than
+				 * silently ignored when odd or zero: librist reserves the low
+				 * bit, and a value that does not take leaves the two senders in
+				 * separate flows -- which looks like a healthy chain right up
+				 * until you notice no NACK is ever answered. */
+				char *fend = NULL;
+				unsigned long fv = strtoul(val, &fend, 0);
+
+				if (fend == val || *fend || fv == 0 || (fv & 1UL) || fv > 0xFFFFFFFFUL) {
+					ret = -1;
+					fprintf(stderr, "Invalid flow_id \"%s\" -- must be a non-zero EVEN 32-bit value\n", val);
+				} else {
+					output_udp_config->flow_id = (uint32_t)fv;
+				}
 			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_PIDS) == 0) {
 				/* Copied verbatim and validated later by rist_pcr_cut_set_filter(),
 				 * the single parser both ends of a Part 8 repair share. The only

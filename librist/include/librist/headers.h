@@ -125,6 +125,22 @@ struct rist_udp_config
 	 *
 	 * Empty (the default) = no filtering, and the gate never runs. */
 	char pid_filter[RIST_MAX_STRING_LONG];
+	/* VSF TR-06-4 Part 8: the flow id (RTP SSRC) this sender must advertise.
+	 *
+	 * librist keys a receiver flow on the sender's SSRC, so two senders feeding
+	 * one receiver land in one flow only if they advertise the SAME value. Left
+	 * to itself each end calls rist_flow_id_create() and gets a random one, and
+	 * the box's local sender and the headend's recovery sender end up in two
+	 * separate flows -- which is fatal, because a NACK can only be served by a
+	 * peer in the same flow as the gap.
+	 *
+	 * Part 7 has no such field because its marker carries the headend's SSRC and
+	 * the box's sender adopts it. Part 8 has no marker, so the value is carried
+	 * out of band and set here instead.
+	 *
+	 * 0 (the default) = behave exactly as before and let the library invent one.
+	 * Must be even; librist reserves the low bit. */
+	uint32_t flow_id;
 };
 
 #ifdef __cplusplus

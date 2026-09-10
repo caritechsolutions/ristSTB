@@ -43,6 +43,7 @@
 #define RIST_URL_PARAM_RTP_OUTPUT_PTYPE "rtp-ptype"
 #define RIST_URL_PARAM_PCR_CUT "pcr_cut"
 #define RIST_URL_PARAM_PIDS "pids"
+#define RIST_URL_PARAM_FLOW_ID "flow_id"
 #define RIST_URL_PARAM_MULTIPLEX_MODE "multiplex-mode"
 #define RIST_URL_PARAM_MULTIPLEX_FILTER "multiplex-filter"
 /* Rist additional parameter names */
