@@ -4802,8 +4802,11 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	uint64_t fsr_check_next_time = 0;
 	uint64_t last_fsr_enable_time = 0;
 	uint64_t last_fsr_disable_time = 0;
+	/* When the CURRENT run of periodic FSR Disables began. Separate from
+	 * last_fsr_disable_time, which moves with every send: the 30 s ceiling has
+	 * to be measured from a fixed point or it can never be reached. */
+	uint64_t fsr_disable_repeat_since = 0;
 	bool fsr_active = false;
-	uint32_t last_recovery_data_count = 0;
 	uint64_t last_debug_time = 0;
 	bool fsr_initialized = false;
 	
@@ -4841,6 +4844,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				bool should_disable_fsr = false;
 				bool found_recovery_peer = false;
 				uint32_t recovery_data_received = 0;
+				/* Newest media timestamp across the weight-1000 peers. The flow
+				 * check below needs this rather than the packet count: see there. */
+				uint64_t recovery_last_data = 0;
 				uint32_t sat_peer_count = 0;
 				uint32_t recovery_peer_count = 0;
 				
@@ -4908,6 +4914,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 							found_recovery_peer = true;
 							recovery_peer_count++;
 							recovery_data_received += peer->stats_receiver_instant.received;
+							if (peer->last_data_received > recovery_last_data)
+								recovery_last_data = peer->last_data_received;
 							
 							if (debug_this_cycle) {
 								rist_log_priv(&ctx->common, RIST_LOG_INFO, 
@@ -5068,16 +5076,42 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				}
 				
 				// Check if FSR is working by looking at recovery peer data flow
+				/* KEYED ON TIME, NOT ON A PACKET COUNT.
+				 *
+				 * This used to compare stats_receiver_instant.received against its
+				 * own previous sample, which reads as a running total but is not
+				 * one: stats.c memsets stats_receiver_instant every stats interval,
+				 * so the value is packets-since-the-last-stats-tick and the
+				 * comparison just tracks whether this second's sample happened to
+				 * land above or below the last one. Observed on hardware as
+				 * "Recovery data flowing (27 packets)" and "No recovery data
+				 * flowing" alternating second by second while the receiver stats
+				 * showed the recovery peer delivering a steady ~215 packets every
+				 * second throughout. The warning was pure sampling noise, and it
+				 * fired at exactly the moments someone reading the log most needs
+				 * to trust it.
+				 *
+				 * last_data_received is monotonic and set on the media path only,
+				 * so "has this peer delivered recently" is a straight subtraction
+				 * with no sampling artefact. */
 				if (fsr_active && found_recovery_peer) {
-					if (recovery_data_received > last_recovery_data_count) {
+					uint64_t rec_silent_ms = recovery_last_data
+						? (now - recovery_last_data) / RIST_CLOCK
+						: UINT64_MAX;
+
+					if (recovery_last_data && rec_silent_ms <= RIST_FSR_DATA_STALL_MS) {
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
-							"FSR: Recovery data flowing (%u packets from weight-1000 peers)\n", 
-							recovery_data_received - last_recovery_data_count);
-					} else if (recovery_data_received == last_recovery_data_count) {
+							"FSR: Recovery data flowing (%u packets this interval, last %llu ms ago)\n",
+							recovery_data_received, (unsigned long long)rec_silent_ms);
+					} else if (recovery_last_data) {
 						rist_log_priv(&ctx->common, RIST_LOG_WARN,
-							"FSR: No recovery data flowing from weight-1000 peers\n");
+							"FSR: No recovery data flowing -- weight-1000 peers silent for %llu ms\n",
+							(unsigned long long)rec_silent_ms);
+					} else {
+						rist_log_priv(&ctx->common, RIST_LOG_WARN,
+							"FSR: FSR is enabled but no weight-1000 peer has EVER delivered media -- "
+							"the far end is not answering the FSR Enable\n");
 					}
-					last_recovery_data_count = recovery_data_received;
 				}
 				
 				// FSR Enable logic - agent selected from the peer list above
@@ -5101,7 +5135,6 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						if (flow_id > 0 && rist_send_fsr_enable(recovery_agent, flow_id) >= 0) {
 							last_fsr_enable_time = now;
 							fsr_active = true;
-							last_recovery_data_count = recovery_data_received;
 							rist_log_priv(&ctx->common, RIST_LOG_INFO,
 								"FSR: Enabled FSR %s\n", 
 								sat_peer ? "due to satellite issues" : "for recovery-only mode");
@@ -5134,16 +5167,29 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 							recovery_agent->adv_peer_id, sat_peer->flow->flow_id);
 						if (rist_send_fsr_disable(recovery_agent, sat_peer->flow->flow_id) >= 0) {
 							last_fsr_disable_time = now;
+							fsr_disable_repeat_since = now;
 							fsr_active = false;
-							last_recovery_data_count = 0;
 							rist_log_priv(&ctx->common, RIST_LOG_INFO,
 								"FSR: Satellite signal recovered, sent FSR Disable\n");
 						}
 					}
 				} else if (!fsr_active && last_fsr_disable_time > 0 && sat_peer) {
-					// Send FSR Disable every 5 seconds until we stop (with timeout after 30 seconds)
-					if ((now - last_fsr_disable_time) >= (5 * ONE_SECOND) &&
-						(now - last_fsr_disable_time) < (30 * ONE_SECOND)) {
+					/* Repeat the Disable every 5 s for 30 s, in case the first one was
+					 * lost, then stop.
+					 *
+					 * The stop used to be unreachable. Both the 5 s cadence and the
+					 * 30 s ceiling were measured from last_fsr_disable_time, which each
+					 * send moves to now -- so the age never grew past ~5 s and the
+					 * timeout branch never ran. Observed on hardware as FSR Disable
+					 * going out every 5 s indefinitely after the feed had returned and
+					 * FSR was long since off. Measure the ceiling from a fixed anchor
+					 * set once when FSR went down. */
+					if ((now - fsr_disable_repeat_since) >= (30 * ONE_SECOND)) {
+						last_fsr_disable_time = 0;
+						fsr_disable_repeat_since = 0;
+						rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
+							"FSR: Stopped sending periodic FSR Disable (30s timeout)\n");
+					} else if ((now - last_fsr_disable_time) >= (5 * ONE_SECOND)) {
 						if (recovery_agent) {
 							if (rist_send_fsr_disable(recovery_agent, sat_peer->flow->flow_id) >= 0) {
 								last_fsr_disable_time = now;
@@ -5151,11 +5197,6 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 									"FSR: Sent periodic FSR Disable (5s timer)\n");
 							}
 						}
-					} else if ((now - last_fsr_disable_time) >= (30 * ONE_SECOND)) {
-						// Stop sending FSR Disable after 30 seconds
-						last_fsr_disable_time = 0;
-						rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-							"FSR: Stopped sending periodic FSR Disable (30s timeout)\n");
 					}
 				}
 				
